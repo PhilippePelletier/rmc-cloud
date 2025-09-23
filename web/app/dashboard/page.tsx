@@ -41,18 +41,23 @@ export default function Dashboard() {
         // Fetch new data
         const mwResp   = await fetch('/api/margin-waterfall', { cache: 'no-store' });
         const skusResp = await fetch('/api/top-skus',       { cache: 'no-store' });
+        const anomaliesResp = await fetch('/api/anomalies', { cache: 'no-store' });
+        
 
         const kpiData  = await kpiResp.json();
         const catData  = await catResp.json();
         const mwData   = await mwResp.json();
         const skusData = await skusResp.json();
+        const anomaliesData = await anomaliesResp.json();
 
         if (!kpiResp.ok)  throw new Error(kpiData.error  || 'Failed to load KPIs');
         if (!catResp.ok)  throw new Error(catData.error  || 'Failed to load categories');
         if (!mwResp.ok)   throw new Error(mwData.error   || 'Failed to load margin waterfall');
         if (!skusResp.ok) throw new Error(skusData.error || 'Failed to load top SKUs');
+        if (!anomaliesResp.ok) throw new Error(anomaliesData.error || 'Failed to load anomalies');
 
         setKpis(kpiData);
+        setAnomalies(anomaliesData.anomalies || []);
         setCats(catData.rows || []);
         setMarginSteps(mwData.steps || []);
         setTopSkus(skusData.rows || []);
