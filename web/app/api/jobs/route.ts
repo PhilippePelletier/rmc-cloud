@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { supaService } from "../lib/supabase";
+import { supaService } from "../../lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
