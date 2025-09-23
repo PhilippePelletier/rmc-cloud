@@ -1,7 +1,8 @@
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { OrganizationSwitcher, CreateOrganization, UserButton } from "@clerk/nextjs";
-import { Toaster } from "react-hot-toast";
+import ToasterClient from '@/components/ToasterClient';
+
 
 export const metadata = { title: "RMC Cloud", description: "Retail Margin Copilot (Cloud)" };
 
@@ -10,7 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <ClerkProvider>
       <html lang="en">
         <body>
-          <Toaster position="top-right" />
+          <ToasterClient />
           <div className="container py-6">
             <header className="mb-6 flex items-center justify-between gap-3">
               <div className="flex items-center gap-4">
