@@ -1,0 +1,14 @@
+// web/middleware.ts
+import { clerkMiddleware } from "@clerk/nextjs/server";
+
+// Run Clerk on pages and API so `auth()` works server-side.
+export default clerkMiddleware();
+
+export const config = {
+  matcher: [
+    // run on all routes except static files and _next
+    "/((?!.+\\.[\\w]+$|_next).*)",
+    "/",
+    "/(api|trpc)(.*)",
+  ],
+};
