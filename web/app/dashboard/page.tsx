@@ -27,6 +27,10 @@ export default function Dashboard() {
   const [topSkus, setTopSkus] = useState<
     Array<{ sku: string; revenue: number; gm_dollar: number; gm_pct: number; units: number }>
   >([]);
+  const [anomalies, setAnomalies] = useState<
+    Array<{ date: string; category: string; revenue: number; delta_pct: number }>
+  >([]);
+
 
   useEffect(() => {
     (async () => {
@@ -181,6 +185,38 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+      
+        {/* Anomalies card */}
+      <div className="card">
+        <div className="h2 mb-3">Anomalies</div>
+        {anomalies.length === 0 ? (
+          <p>No anomalies detected in the selected period.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th className="p-2">Date</th>
+                  <th className="p-2">Category</th>
+                  <th className="p-2">Revenue</th>
+                  <th className="p-2">Δ vs mean (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {anomalies.map((a, idx) => (
+                  <tr key={idx} className="border-t">
+                    <td className="p-2">{a.date}</td>
+                    <td className="p-2">{a.category}</td>
+                    <td className="p-2">${Math.round(a.revenue).toLocaleString()}</td>
+                    <td className="p-2">{a.delta_pct.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
     </main>
   );
 }
