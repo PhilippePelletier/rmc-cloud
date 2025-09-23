@@ -1,17 +1,22 @@
+// web/app/layout.tsx
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import { OrganizationSwitcher, CreateOrganization, UserButton } from "@clerk/nextjs";
-import ToasterClient from "../components/ToasterClient";
+import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
+import ToasterClient from "../components/ToasterClient"; // make sure this file exists
 
-
-export const metadata = { title: "RMC Cloud", description: "Retail Margin Copilot (Cloud)" };
+export const metadata = {
+  title: "RMC Cloud",
+  description: "Retail Margin Copilot (Cloud)",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
       <html lang="en">
         <body>
+          {/* Toaster must render from a client component */}
           <ToasterClient />
+
           <div className="container py-6">
             <header className="mb-6 flex items-center justify-between gap-3">
               <div className="flex items-center gap-4">
@@ -25,12 +30,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div className="flex items-center gap-3">
                 <OrganizationSwitcher />
-                <CreateOrganization>
-                  <button className="btn">New Org</button>
-                </CreateOrganization>
+                    <a className="btn" href="/create-organization">New Org</a>
                 <UserButton />
               </div>
             </header>
+
             {children}
           </div>
         </body>
