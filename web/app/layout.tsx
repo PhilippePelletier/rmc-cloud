@@ -1,7 +1,7 @@
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { OrganizationSwitcher, CreateOrganization, UserButton } from "@clerk/nextjs";
-import ToasterClient from '@/components/ToasterClient';
+import ToasterClient from "../components/ToasterClient";
 
 
 export const metadata = { title: "RMC Cloud", description: "Retail Margin Copilot (Cloud)" };
