@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { SignedIn, SignedOut, SignInButton, UserButton, auth } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+;
 
 export default async function Home() {
   return (
