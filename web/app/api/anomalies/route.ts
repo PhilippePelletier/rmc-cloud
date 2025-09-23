@@ -2,9 +2,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { supaService } from "../../lib/supabase";
-import dayjs from "dayjs";
 
 export const dynamic = 'force-dynamic';
+
+interface DailyAggRow {
+  date: string;
+  category: string | null;
+  net_sales: number | null;
+}
 
 export async function GET() {
   const { userId, orgId } = auth();
@@ -20,30 +25,29 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Simple rolling mean and std deviation to find anomalies
-  const anomalies: Array<{ date: string; category: string; revenue: number; delta_pct: number }> = [];
-  const byCat: Record<string, { values: number[]; dates: string[] }> = {};
-
-  for (const row of data || []) {
-    const cat = row.category || "Uncategorized";
-    byCat[cat] ??= { values: [], dates: [] };
-    byCat[cat].values.push(Number(row.net_sales || 0));
-    byCat[cat].dates.push(row.date);
+  // Group data by category
+  const grouped: Record<string, { dates: string[]; values: number[] }> = {};
+  for (const row of (data as DailyAggRow[]) || []) {
+    const cat = row.category ?? "Uncategorized";
+    grouped[cat] ??= { dates: [], values: [] };
+    grouped[cat].dates.push(row.date);
+    grouped[cat].values.push(Number(row.net_sales || 0));
   }
 
-  for (const [category, { values, dates }] of Object.entries(byCat)) {
-    const n = values.length;
+  const anomalies: Array<{ date: string; category: string; revenue: number; delta_pct: number }> = [];
+  for (const [cat, { dates, values }] of Object.entries(grouped)) {
+    const n    = values.length;
     const mean = values.reduce((a, v) => a + v, 0) / n;
     const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
-    const std = Math.sqrt(variance);
+    const std  = Math.sqrt(variance);
 
-    values.forEach((v, i) => {
-      if (std > 0 && Math.abs(v - mean) / std > 2) { // simple 2-sigma rule
+    values.forEach((v, idx) => {
+      if (std > 0 && Math.abs(v - mean) > 2 * std) {
         anomalies.push({
-          date: dates[i],
-          category,
+          date: dates[idx],
+          category: cat,
           revenue: v,
-          delta_pct: std ? ((v - mean) / mean) * 100 : 0,
+          delta_pct: mean ? ((v - mean) / mean) * 100 : 0,
         });
       }
     });
