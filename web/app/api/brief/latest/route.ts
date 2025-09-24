@@ -6,9 +6,16 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const { userId, orgId } = auth();
-  if (!userId || !orgId) return NextResponse.json({ error: "Auth required" }, { status: 401 });
+  if (!userId) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+  
+  // Use the organization if present, otherwise fall back to the user ID.
+  const groupId = orgId ?? userId;
+  
   const supa = supaService();
-  const { data, error } = await supa.from("briefs").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1).single();
+
+  const { data, error } = await supa.from("briefs").select("*").eq("org_id", groupId).order("created_at", { ascending: false }).limit(1).single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
   // get signed URL for pdf if stored
   let pdf_url = null;
