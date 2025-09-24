@@ -6,7 +6,12 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const { userId, orgId } = auth();
-  if (!userId || !orgId) return NextResponse.json({ error: "Auth required" }, { status: 401 });
+  if (!userId) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+  
+  // Use the organization if present, otherwise fall back to the user ID.
+  const groupId = orgId ?? userId;
 
   const form = await req.formData();
   const kind = String(form.get("kind"));
@@ -14,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!file || !kind) return NextResponse.json({ error: "Missing file/kind" }, { status: 400 });
 
   const supa = supaService();
-  const path = `${orgId}/${Date.now()}-${kind}.csv`;
+  const path = `${groupId}/${Date.now()}-${kind}.csv`;
   const buf = Buffer.from(await file.arrayBuffer());
   const up = await supa.storage.from("rmc-uploads").upload(path, buf, { contentType: "text/csv", upsert: true });
   if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });
