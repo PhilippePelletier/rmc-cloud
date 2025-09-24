@@ -6,12 +6,19 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const { userId, orgId } = auth();
-  if (!userId || !orgId) return NextResponse.json({ error: "Auth required" }, { status: 401 });
+  if (!userId) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+  
+  // Use the organization if present, otherwise fall back to the user ID.
+  const groupId = orgId ?? userId;
+  
   const supa = supaService();
+
   const { data, error } = await supa
     .from("daily_agg")
     .select("category, net_sales, gm_dollar, units")
-    .eq("org_id", orgId);
+    .eq("org_id", groupId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const agg: Record<string, {rev:number,gm:number,units:number}> = {};
   (data||[]).forEach((r:any)=>{
