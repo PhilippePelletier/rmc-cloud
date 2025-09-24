@@ -6,15 +6,20 @@ import { supaService } from "../../lib/supabase";
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const { userId, orgId } = auth();
-  if (!userId || !orgId)
-    return NextResponse.json({ error: "Auth required" }, { status: 401 });
-
+ const { userId, orgId } = auth();
+  if (!userId) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+  
+  // Use the organization if present, otherwise fall back to the user ID.
+  const groupId = orgId ?? userId;
+  
   const supa = supaService();
+
   const { data, error } = await supa
     .from("sales")
     .select("sku, net_sales, gm_dollar, units")
-    .eq("org_id", orgId);
+    .eq("org_id", groupId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
