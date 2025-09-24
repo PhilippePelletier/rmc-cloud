@@ -7,10 +7,15 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const { userId, orgId } = auth();
-  if (!userId || !orgId)
-    return NextResponse.json({ error: "Auth required" }, { status: 401 });
-
+  if (!userId) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+  
+  // Use the organization if present, otherwise fall back to the user ID.
+  const groupId = orgId ?? userId;
+  
   const supa = supaService();
+
   const { data: daily, error } = await supa
     .from("daily_agg")
     .select("date, net_sales, gm_dollar, units")
