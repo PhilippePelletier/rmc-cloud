@@ -1,14 +1,15 @@
 // web/app/layout.tsx
 import "./globals.css";
-import { ClerkProvider } from "@clerk/nextjs";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 import ToasterClient from "../components/ToasterClient"; // make sure this file exists
 import {
+  ClerkProvider,
+  OrganizationSwitcher,
+  UserButton,
   SignedIn,
   SignedOut,
-  SignInButton,
-  UserButton
+  SignInButton
 } from '@clerk/nextjs';
+
 
 
 export const metadata = {
