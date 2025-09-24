@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data, error } = await supa.from("jobs")
     .select("id, kind, status, message, created_at, updated_at")
-    .eq("org_id", groupID)
+    .eq("org_id", groupId)
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
