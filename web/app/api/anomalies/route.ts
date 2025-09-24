@@ -13,14 +13,19 @@ interface DailyAggRow {
 
 export async function GET() {
   const { userId, orgId } = auth();
-  if (!userId || !orgId)
-    return NextResponse.json({ error: "Auth required" }, { status: 401 });
+  if (!userId) {
+    return NextResponse.json({ error: 'Auth required' }, { status: 401 });
+  }
+  
+  // Use the organization if present, otherwise fall back to the user ID.
+  const groupId = orgId ?? userId;
 
-  const supa = supaService();
+const supa = supaService();
+
   const { data, error } = await supa
     .from("daily_agg")
     .select("date, category, net_sales")
-    .eq("org_id", orgId)
+    .eq("org_id", groupId)
     .order("date", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
