@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });
 
   // record upload + job
-  const { error: insErr, data } = await supa.from("jobs").insert({ org_id: orgId, kind, path, status: "queued" }).select("id").single();
+  const { error: insErr, data } = await supa.from("jobs").insert({ org_id: groupId, kind, path, status: "queued" }).select("id").single();
   if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
   // notify worker
