@@ -19,7 +19,7 @@ export async function GET() {
   const { data: daily, error } = await supa
     .from("daily_agg")
     .select("date, net_sales, gm_dollar, units")
-    .eq("org_id", groupID)
+    .eq("org_id", groupId)
     .order("date", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
