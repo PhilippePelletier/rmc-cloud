@@ -13,7 +13,15 @@ type DailyAggRow = {
 
 export async function GET(req: Request) {
   try {
-    const { groupId, supabase } = await getApiContext();
+        // After (fixed code in kpis/route.ts)
+    const context = await getApiContext();
+    if ('error' in context) {
+      // If not authenticated, context.error is a NextResponse (e.g. 401 JSON error)
+      return context.error;
+    }
+    const { groupId, supabase } = context;
+    // ... now safe to use supabase ...
+
 
     // Optional filters: ?from=YYYY-MM-DD&to=YYYY-MM-DD
     const url = new URL(req.url);
