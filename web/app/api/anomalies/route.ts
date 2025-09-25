@@ -1,50 +1,46 @@
-// app/api/anomalies/route.ts
 import { NextResponse } from "next/server";
 import { getApiContext } from "@/app/lib/api-ctx";
 
 export const dynamic = "force-dynamic";
 
-type Row = {
-  date: string;
-  category: string | null;
-  net_sales: number | null;
-};
+type Anomaly = { date: string; category: string; revenue: number; delta_pct: number };
 
 export async function GET() {
-  // Centralized auth + Supabase client + tenant (org or user)
+  // Auth + Supabase client + workspace context
   const ctx = await getApiContext();
   if ("error" in ctx) return ctx.error;
-  const { supa, groupId } = ctx;
+  const { supabase, groupId } = ctx;
 
-  // Pull the series for this tenant
-  const { data, error } = await supa
+  // Query recent daily aggregates for this workspace (last ~90 days)
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 90);
+  const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+  const { data, error } = await supabase
     .from("daily_agg")
     .select("date, category, net_sales")
-    .eq("group_id", groupId)            // <-- tenant scoping
+    .eq("group_id", groupId)
+    .gte("date", cutoffStr)
     .order("date", { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Group by category
+  // Group data by category and perform anomaly detection (2σ rule)
+  const anomalies: Anomaly[] = [];
   const grouped: Record<string, { dates: string[]; values: number[] }> = {};
-  for (const row of (data as Row[]) ?? []) {
+  for (const row of data ?? []) {
     const cat = row.category ?? "Uncategorized";
-    const v = Number(row.net_sales ?? 0);
+    const value = Number(row.net_sales ?? 0);
     (grouped[cat] ??= { dates: [], values: [] }).dates.push(row.date);
-    grouped[cat].values.push(v);
+    grouped[cat].values.push(value);
   }
-
-  // Simple 2-sigma anomaly detection per category
-  const anomalies: Array<{ date: string; category: string; revenue: number; delta_pct: number }> = [];
   for (const [cat, { dates, values }] of Object.entries(grouped)) {
-    if (values.length < 4) continue; // need a little history
-    const mean = values.reduce((a, v) => a + v, 0) / values.length;
-    const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
+    if (values.length < 4) continue; // need at least a few points
+    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
     const std = Math.sqrt(variance) || 0;
     if (!std) continue;
-
     values.forEach((v, i) => {
       if (Math.abs(v - mean) > 2 * std) {
         anomalies.push({
