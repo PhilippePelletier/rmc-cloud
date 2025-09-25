@@ -1,10 +1,10 @@
-// web/app/api/upload/route.ts
+// app/api/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supaRls } from "@/app/lib/supabase-rls";     // DB via RLS (Clerk JWT template "supabase")
-import { getCurrentGroupId } from "@/app/lib/group";  // org UUID string if org selected, else userId
-import { createClient } from "@supabase/supabase-js"; // service client for Storage + admin ops
+import { getApiContext } from "@/app/lib/api";              // unified: { groupId, supa } (RLS client)
+import { createClient } from "@supabase/supabase-js";       // service client for Storage + admin ops
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs"; // required to use Buffer in route handlers
 
 function isUuidLike(s: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
@@ -12,18 +12,27 @@ function isUuidLike(s: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1) Resolve workspace key
-    const groupId = await getCurrentGroupId(); // string: org uuid or userId
+    // 1) Auth + workspace (org UUID or userId) + RLS client
+    const { groupId, supa } = await getApiContext(); // throws 401 if not signed-in
 
     // 2) Parse form-data
     const form = await req.formData();
     const kind = String(form.get("kind") || "");
     const file = form.get("file") as File | null;
+
     if (!file || !kind) {
       return NextResponse.json({ error: "Missing file/kind" }, { status: 400 });
     }
 
-    // 3) Use SERVICE client for Storage (separate from RLS DB client)
+    // Optional: basic guardrails on file type/size
+    if (!file.type?.includes("csv")) {
+      return NextResponse.json({ error: "Only CSV files are allowed" }, { status: 400 });
+    }
+    if (file.size > 25 * 1024 * 1024) { // 25 MB
+      return NextResponse.json({ error: "File too large (max 25MB)" }, { status: 413 });
+    }
+
+    // 3) SERVICE client for Storage (separate from RLS DB client)
     const admin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY! // server-only
@@ -41,16 +50,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 5) Insert a job row via RLS client (policies must allow insert when group_id = jwt claim)
-    const supa = await supaRls();
-
-    // If groupId is an org UUID, persist it in org_id; otherwise keep org_id = null for personal space
+    // If groupId is an org UUID, set org_id; else keep org_id = null for personal space.
     const orgIdForRow = isUuidLike(groupId) ? groupId : null;
 
-    const { data, error: insErr } = await supa
+    const { data: jobRow, error: insErr } = await supa
       .from("jobs")
       .insert({
-        group_id: groupId,     // ALWAYS set
-        org_id: orgIdForRow,   // set only if groupId looks like a UUID (org)
+        group_id: groupId,   // ALWAYS set (TEXT: org uuid or userId)
+        org_id: orgIdForRow, // nullable for personal workspaces
         kind,
         path,
         status: "queued",
@@ -62,20 +69,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insErr.message }, { status: 500 });
     }
 
-    // 6) Notify the worker
-    const url = `${process.env.WORKER_URL}/jobs/process`;
-    const res = await fetch(url, {
+    // 6) Notify the worker (shared secret)
+    const res = await fetch(`${process.env.WORKER_URL}/jobs/process`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-RMC-Secret": process.env.WORKER_SHARED_SECRET!,
       },
-      body: JSON.stringify({ job_id: data.id }),
+      body: JSON.stringify({ job_id: jobRow.id }),
     }).catch(() => null);
 
     return NextResponse.json({
       status: "queued",
-      job_id: data.id,
+      job_id: jobRow.id,
       worker_notified: res?.ok ?? false,
     });
   } catch (e: any) {
@@ -84,3 +90,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: code });
   }
 }
+
