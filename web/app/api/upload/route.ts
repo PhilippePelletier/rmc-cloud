@@ -1,6 +1,6 @@
 // app/api/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getApiContext } from "@/app/lib/api";              // unified: { groupId, supa } (RLS client)
+import { getApiContext } from "@/app/lib/api-ctx";              // unified: { groupId, supa } (RLS client)
 import { createClient } from "@supabase/supabase-js";       // service client for Storage + admin ops
 
 export const dynamic = "force-dynamic";
