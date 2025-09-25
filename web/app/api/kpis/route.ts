@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     const from = url.searchParams.get("from");
     const to   = url.searchParams.get("to");
 
-    let q = supa
+    let q = supabase
       .from("daily_agg")
       .select("date, net_sales, gm_dollar, units")
       .eq("group_id", groupId);
