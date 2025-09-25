@@ -1,6 +1,6 @@
 // app/api/margin-waterfall/route.ts
 import { NextResponse } from "next/server";
-import { getApiContext } from "@/app/lib/api";
+import { getApiContext } from "@/app/lib/api-ctx";
 
 export const dynamic = "force-dynamic";
 
