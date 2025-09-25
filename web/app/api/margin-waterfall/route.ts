@@ -1,31 +1,35 @@
-// web/app/api/margin-waterfall/route.ts
+// app/api/margin-waterfall/route.ts
 import { NextResponse } from "next/server";
-import { supaRls } from "@/app/lib/supabase-rls";     // RLS client (Clerk JWT template "supabase")
-import { getCurrentGroupId } from "@/app/lib/group";  // org UUID string if org selected, else userId
+import { getApiContext } from "@/app/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+type Row = { net_sales: number | null; gm_dollar: number | null };
+
+export async function GET(req: Request) {
   try {
-    // 1) Resolve workspace (org uuid string OR user id)
-    const groupId = await getCurrentGroupId();
+    const { groupId, supa } = await getApiContext();
 
-    // 2) Use RLS-enforced client
-    const supa = await supaRls();
+    // Optional date filters: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    const url = new URL(req.url);
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
 
-    // 3) Filter by group_id (TEXT), not org_id
-    const { data, error } = await supa
+    let q = supa
       .from("daily_agg")
       .select("net_sales, gm_dollar")
       .eq("group_id", groupId);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (from) q = q.gte("date", from);
+    if (to)   q = q.lte("date", to);
 
-    const rows = data ?? [];
-    const totalRevenue = rows.reduce((acc, r: any) => acc + Number(r.net_sales ?? 0), 0);
-    const totalGM      = rows.reduce((acc, r: any) => acc + Number(r.gm_dollar ?? 0), 0);
+    const { data, error } = await q;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const rows: Row[] = (data ?? []) as Row[];
+
+    const totalRevenue = rows.reduce((acc, r) => acc + Number(r.net_sales  ?? 0), 0);
+    const totalGM      = rows.reduce((acc, r) => acc + Number(r.gm_dollar ?? 0), 0);
     const totalCost    = totalRevenue - totalGM;
 
     return NextResponse.json({
@@ -43,3 +47,4 @@ export async function GET() {
     );
   }
 }
+
