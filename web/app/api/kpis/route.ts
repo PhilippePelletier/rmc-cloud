@@ -13,7 +13,7 @@ type DailyAggRow = {
 
 export async function GET(req: Request) {
   try {
-    const { groupId, supa } = await getApiContext();
+    const { groupId, supabase } = await getApiContext();
 
     // Optional filters: ?from=YYYY-MM-DD&to=YYYY-MM-DD
     const url = new URL(req.url);
