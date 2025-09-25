@@ -1,21 +1,10 @@
-// web/app/lib/group.ts
 import 'server-only';
 import { auth } from '@clerk/nextjs/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Admin client — uses service role on the server only
-const supaAdmin = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // NEVER expose to the browser
-  { auth: { persistSession: false } }
-);
+import { getSupabaseAdminClient } from '@/app/lib/supabase';
 
 /**
- * Returns the current "group" identifier and its type.
- * - If the user is inside a Clerk organization, we use the organization ID.
- * - Otherwise we use the user's Clerk userId.
- *
- * This is the single place to derive group scope for all API routes.
+ * Determines the current workspace "group" (either an organization or a personal user).
+ * Returns an object with `groupId` (org ID or user ID) and `groupType` ('org' or 'user').
  */
 export async function getGroup() {
   const { userId, orgId } = auth();
@@ -23,20 +12,19 @@ export async function getGroup() {
   if (!userId) {
     return { groupId: null as string | null, groupType: null as 'org' | 'user' | null };
   }
-
-  // Prefer org when present
+  // Use organization ID if user is in an org, otherwise use personal userId
   if (orgId) {
     return { groupId: orgId, groupType: 'org' as const };
   }
-
   return { groupId: userId, groupType: 'user' as const };
 }
 
 /**
- * Optional: ensure there is a row in `orgs` when we see a new orgId.
- * Call this AFTER getGroup() whenever groupType === 'org'.
+ * Ensures a row exists in the `orgs` table for the given orgId.
+ * Should be called whenever we encounter a new organization context.
  */
 export async function ensureOrg(orgId: string, name?: string) {
   if (!orgId) return;
-  await supaAdmin.from('orgs').upsert({ id: orgId, name: name ?? orgId }).eq('id', orgId);
+  const supabaseAdmin = getSupabaseAdminClient();
+  await supabaseAdmin.from('orgs').upsert({ id: orgId, name: name ?? orgId }).eq('id', orgId);
 }
