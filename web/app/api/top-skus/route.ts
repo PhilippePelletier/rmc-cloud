@@ -14,7 +14,9 @@ type Row = {
 
 export async function GET(req: Request) {
   try {
-    const { groupId, supa } = await getApiContext();
+    const context = await getApiContext();
+   if ('error' in context) return context.error;
+   const { groupId, supabase } = context;
 
     // Optional query params: ?from=YYYY-MM-DD&to=YYYY-MM-DD&top=10
     const url  = new URL(req.url);
@@ -22,7 +24,7 @@ export async function GET(req: Request) {
     const to   = url.searchParams.get("to");
     const top  = Math.max(1, Math.min(50, Number(url.searchParams.get("top") ?? 10)));
 
-    let q = supa
+    let q = supabase
       .from("sales")
       .select("sku, net_sales, gm_dollar, units, date")
       .eq("group_id", groupId);
