@@ -1,36 +1,48 @@
-// web/app/api/top-categories/route.ts
+// app/api/top-categories/route.ts
 import { NextResponse } from "next/server";
-import { supaRls } from "@/app/lib/supabase-rls";     // RLS client (Clerk JWT template "supabase")
-import { getCurrentGroupId } from "@/app/lib/group";  // org UUID string if org selected, else userId
+import { getApiContext } from "@/app/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+type Row = {
+  category: string | null;
+  net_sales: number | null;
+  gm_dollar: number | null;
+  units: number | null;
+};
+
+export async function GET(req: Request) {
   try {
-    // 1) Resolve workspace (org uuid string OR user id)
-    const groupId = await getCurrentGroupId();
+    const { groupId, supa } = await getApiContext();
 
-    // 2) Use RLS-enforced client
-    const supa = await supaRls();
+    // Optional: ?from=YYYY-MM-DD&to=YYYY-MM-DD&top=8
+    const url  = new URL(req.url);
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
+    const top  = Math.max(1, Math.min(50, Number(url.searchParams.get("top") ?? 8)));
 
-    // 3) Filter by group_id (TEXT), not org_id
-    const { data, error } = await supa
+    let q = supa
       .from("daily_agg")
       .select("category, net_sales, gm_dollar, units")
       .eq("group_id", groupId);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (from) q = q.gte("date", from);
+    if (to)   q = q.lte("date", to);
+
+    const { data, error } = await q;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const agg: Record<string, { rev: number; gm: number; units: number }> = {};
-    (data ?? []).forEach((r: any) => {
-      const k = r.category || "Uncategorized";
+    for (const r of (data ?? []) as Row[]) {
+      const k = r.category ?? "Uncategorized";
+      const rev = Number(r.net_sales  ?? 0);
+      const gm  = Number(r.gm_dollar ?? 0);
+      const u   = Number(r.units     ?? 0);
       agg[k] ??= { rev: 0, gm: 0, units: 0 };
-      agg[k].rev += Number(r.net_sales ?? 0);
-      agg[k].gm  += Number(r.gm_dollar ?? 0);
-      agg[k].units += Number(r.units ?? 0);
-    });
+      agg[k].rev   += rev;
+      agg[k].gm    += gm;
+      agg[k].units += u;
+    }
 
     const rows = Object.entries(agg)
       .map(([category, v]) => ({
@@ -41,13 +53,14 @@ export async function GET() {
         gm_pct: v.rev ? v.gm / v.rev : 0,
       }))
       .sort((a, b) => b.rev - a.rev)
-      .slice(0, 8);
+      .slice(0, top);
 
     return NextResponse.json({ rows });
   } catch (e: any) {
+    const msg = typeof e?.message === "string" ? e.message : "Unexpected error";
     return NextResponse.json(
-      { error: e?.message || "Unexpected error" },
-      { status: /auth required/i.test(e?.message) ? 401 : 500 }
+      { error: msg },
+      { status: /auth required/i.test(msg) ? 401 : 500 }
     );
   }
 }
