@@ -1,7 +1,7 @@
-# worker/app.py
 import os
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from io import StringIO
 from typing import Tuple, Optional, List, Dict, Any
 
@@ -13,25 +13,28 @@ from sqlalchemy import create_engine, text
 from supabase import create_client, Client
 import openai
 from weasyprint import HTML
+import markdown
 
 app = FastAPI(title="RMC Cloud Worker")
 
 # -----------------------------------------------------------------------------#
 # Config
 # -----------------------------------------------------------------------------#
-SUPABASE_URL   = os.getenv("SUPABASE_URL")
-SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # service role key
-SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")           # direct Postgres URL
-SECRET         = os.getenv("WORKER_SHARED_SECRET", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # service role key
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")         # direct Postgres URL
+SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if OPENAI_API_KEY:
     openai.api_key = OPENAI_API_KEY
 
-# Supabase service client (Storage + REST)
-supa: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+logging.basicConfig(level=logging.INFO)
 
-# Direct Postgres for bulk upserts/queries
+# Supabase service client (for DB and Storage operations)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Direct Postgres engine for bulk upserts/queries
 engine = create_engine(SUPABASE_DB_URL, future=True)
 
 # -----------------------------------------------------------------------------#
@@ -51,13 +54,13 @@ BRIEF_MD_TEMPLATE = Template(
 - **Units Sold:** {{ units|round(0)|int }}
 
 ## Top Categories
-{% for row in top_categories %}
+{% for row in top_categories -%}
 - **{{ row.category }}:** ${{ row.revenue|round(0)|int }} (GM%: {{ (row.gm_pct * 100)|round(1) }}%)
 {% endfor %}
 
 ## Anomalies
 {% if anomalies %}
-{% for a in anomalies %}
+{% for a in anomalies -%}
 - On {{ a.date }}, **{{ a.category }}** revenue was {{ a.delta_pct|round(1) }}% off the mean (revenue: ${{ a.revenue|round(0)|int }})
 {% endfor %}
 {% else %}
@@ -66,23 +69,30 @@ No anomalies detected this week.
 """.lstrip()
 )
 
+# CSS styles for PDF rendering
+PDF_CSS = """
+body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
+h1 { font-size: 1.4em; margin-bottom: 0.5em; }
+h2 { font-size: 1.2em; margin-top: 1em; margin-bottom: 0.5em; }
+ul { margin-left: 1.5em; margin-bottom: 1em; }
+li { margin-bottom: 0.25em; }
+"""
+
 # -----------------------------------------------------------------------------#
 # Helpers
 # -----------------------------------------------------------------------------#
 def aggregate(group_id: str) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
     """
     Read raw sales data for this workspace (group_id) and compute daily aggregates.
-    group_id is ALWAYS present (userId or org UUID).
+    Returns a tuple of (raw_df, daily_df) or None if no data.
     """
     with engine.begin() as conn:
         df = pd.read_sql(
-            text(
-                """
+            text("""
                 SELECT date, store_id, category, units, net_sales, cost
                 FROM sales
                 WHERE group_id = :g
-                """
-            ),
+            """),
             conn,
             params={"g": group_id},
         )
@@ -91,6 +101,7 @@ def aggregate(group_id: str) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
 
     df["gm_dollar"] = df["net_sales"] - df["cost"]
 
+    # Aggregate daily totals per store-category
     daily = (
         df.groupby(["date", "store_id", "category"], as_index=False)
         .agg(
@@ -105,28 +116,41 @@ def aggregate(group_id: str) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
 
 def upsert_table(conn, group_id: str, org_id: Optional[str], df: pd.DataFrame, table: str) -> None:
     """
-    Append DataFrame into target table, adding group_id (always) and org_id (nullable).
+    Insert DataFrame into the target table with the given group_id and org_id.
+    Uses upsert for the 'sales' table to avoid duplicate entries.
     """
     out = df.copy()
     out["group_id"] = group_id
-    out["org_id"]   = org_id  # can be None
-    out.to_sql(table, conn, if_exists="append", index=False)
+    out["org_id"] = org_id  # org_id can be None
+    if table == "sales":
+        # Bulk upsert for sales: ignore duplicates on (group_id, date, store_id, sku)
+        records = out.to_dict(orient="records")
+        conn.execute(text("""
+            INSERT INTO sales (
+                date, store_id, sku, product_name, units, net_sales, discount, cost, category, sub_category, group_id, org_id
+            ) VALUES (
+                :date, :store_id, :sku, :product_name, :units, :net_sales, :discount, :cost, :category, :sub_category, :group_id, :org_id
+            )
+            ON CONFLICT (group_id, date, store_id, sku) DO NOTHING
+        """), records)
+    else:
+        out.to_sql(table, conn, if_exists="append", index=False)
 
 
 def compute_metrics(raw: pd.DataFrame, daily: pd.DataFrame) -> Dict[str, Any]:
-    revenue   = float(daily["net_sales"].sum())
+    revenue = float(daily["net_sales"].sum())
     gm_dollar = float(daily["gm_dollar"].sum())
-    gm_pct    = (gm_dollar / revenue) if revenue else 0.0
-    units     = float(daily["units"].sum())
+    gm_pct = (gm_dollar / revenue) if revenue else 0.0
+    units = float(daily["units"].sum())
 
-    # Top categories
+    # Top categories (top 5 by revenue)
     cats = (
         daily.groupby("category", dropna=False)
         .agg(revenue=("net_sales", "sum"), gm=("gm_dollar", "sum"), units=("units", "sum"))
         .reset_index()
     )
     cats["category"] = cats["category"].fillna("Uncategorized")
-    cats["gm_pct"]   = cats["gm"] / cats["revenue"].replace({0: 1})
+    cats["gm_pct"] = cats["gm"] / cats["revenue"].replace({0: 1})
     top_categories = (
         cats.sort_values("revenue", ascending=False)
         .head(5)
@@ -134,22 +158,24 @@ def compute_metrics(raw: pd.DataFrame, daily: pd.DataFrame) -> Dict[str, Any]:
         .to_dict(orient="records")
     )
 
-    # Simple anomaly detection (2σ rule per category)
+    # Simple anomaly detection (2σ) on recent data (~last 90 days per category)
     anomalies: List[Dict[str, Any]] = []
-    for cat, group in daily.groupby("category", dropna=False):
+    daily["date"] = pd.to_datetime(daily["date"])
+    cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=90)
+    recent_daily = daily[daily["date"] >= cutoff_date]
+    for cat, group in recent_daily.groupby("category", dropna=False):
         cat_name = cat if pd.notna(cat) else "Uncategorized"
         vals = group["net_sales"].astype(float)
         mean = vals.mean()
-        std  = vals.std(ddof=0) or 1e-9
+        std = vals.std(ddof=0) or 1e-9
         for date, revenue_val in zip(group["date"], vals):
             if abs(revenue_val - mean) > 2 * std:
-                delta_pct = (revenue_val - mean) / mean * 100 if mean else 0
                 anomalies.append({
                     "date": str(date),
                     "category": cat_name,
                     "revenue": float(revenue_val),
-                    "delta_pct": float(delta_pct),
-                })
+                    "delta_pct": mean and mean != 0.0 ? ((revenue_val - mean) / mean) * 100 : 0.0
+                })  # Note: If mean is 0, delta_pct is set to 0.
 
     return {
         "revenue": revenue,
@@ -167,7 +193,7 @@ def generate_ai_narrative(metrics: Dict[str, Any]) -> str:
     prompt = f"""
 You are an AI assistant who creates a weekly business brief for a small retailer.
 Below are the aggregated metrics for the week. Please:
-1) Summarise the overall performance (revenue, gross margin, units).
+1) Summarize the overall performance (revenue, gross margin, units).
 2) Highlight top and bottom categories and significant changes.
 3) Explain detected anomalies and why they matter.
 4) Suggest up to three actionable steps for next week.
@@ -190,20 +216,21 @@ Metrics:
         )
         return resp.choices[0].message["content"].strip()
     except Exception as e:
-        print(f"AI generation failed: {e}")
+        logging.error(f"AI generation failed: {e}")
         return "AI narrative could not be generated this week due to an internal error."
 
 
 def download_csv(bucket: str, path: str) -> pd.DataFrame:
-    res: bytes = supa.storage.from_(bucket).download(path)
+    # Download a CSV file from Supabase Storage and return it as a pandas DataFrame
+    res: bytes = supabase.storage.from_(bucket).download(path)
     return pd.read_csv(StringIO(res.decode("utf-8")))
 
 # -----------------------------------------------------------------------------#
-# Job processor
+# Job processor endpoint
 # -----------------------------------------------------------------------------#
 @app.post("/jobs/process")
 async def process(req: Request):
-    # 0) Auth (shared secret from web)
+    # 0) Authenticate request using shared secret
     if req.headers.get("x-rmc-secret", "") != SECRET:
         raise HTTPException(status_code=401, detail="unauthorized")
 
@@ -212,77 +239,103 @@ async def process(req: Request):
     if not job_id:
         raise HTTPException(status_code=400, detail="missing job_id")
 
-    # 1) Load job (now expects group_id always; org_id may be null)
-    job = (
-        supa.table("jobs")
-        .select("*")
-        .eq("id", job_id)
-        .single()
-        .execute()
-        .data
-    )
+    # 1) Retrieve job record (contains group_id and optional org_id)
+    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute().data
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
 
-    # Workspace identifiers
-    group_id: str           = job.get("group_id") or job.get("org_id")  # backward compat
-    org_id: Optional[str]   = job.get("org_id")  # may be None in personal workspace
-    kind: str               = job["kind"]
-    path: str               = job["path"]
-
+    # Identify workspace
+    group_id: str = job.get("group_id") or job.get("org_id")
+    org_id: Optional[str] = job.get("org_id")
+    kind: str = job["kind"]
+    path: str = job["path"]
     if not group_id:
         raise HTTPException(status_code=400, detail="job missing group_id")
 
-    # 2) Mark RUNNING
-    supa.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
+    # 2) Mark job as running
+    supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
 
     try:
-        # 3) Download CSV
+        logging.info(f"Started processing job {job_id} (kind='{kind}', group_id='{group_id}')")
+
+        # 3) Load the uploaded CSV from storage
         df = download_csv("rmc-uploads", path)
 
-        # 4) Ingest CSV into business tables with group_id (+ org_id if present)
+        # 4) Process CSV data into the appropriate table(s)
         with engine.begin() as conn:
             if kind == "sales":
-                required_cols = [
-                    "date", "store_id", "sku", "product_name",
-                    "units", "net_sales", "discount", "cost",
-                    "category", "sub_category"
-                ]
-                # Keep only expected columns (raise if missing)
+                required_cols = ["date", "store_id", "sku", "product_name", "units", "net_sales", "discount", "cost", "category", "sub_category"]
                 missing = [c for c in required_cols if c not in df.columns]
                 if missing:
                     raise ValueError(f"sales CSV missing columns: {missing}")
                 df = df[required_cols]
+                # Validate types
+                df["date"] = pd.to_datetime(df["date"], errors="raise")
+                for col in ["units", "net_sales", "discount", "cost"]:
+                    df[col] = pd.to_numeric(df[col], errors="raise")
                 upsert_table(conn, group_id, org_id, df, "sales")
 
             elif kind == "product_master":
+                required_cols = ["sku", "product_name", "category", "sub_category", "default_cost", "status"]
+                missing = [c for c in required_cols if c not in df.columns]
+                if missing:
+                    raise ValueError(f"product_master CSV missing columns: {missing}")
+                df = df[required_cols]
+                df["default_cost"] = pd.to_numeric(df["default_cost"], errors="raise")
+                df["status"] = df["status"].astype(str)
                 upsert_table(conn, group_id, org_id, df, "products")
 
             elif kind == "store_master":
+                required_cols = ["store_id", "store_name", "region", "city", "currency", "is_active"]
+                missing = [c for c in required_cols if c not in df.columns]
+                if missing:
+                    raise ValueError(f"store_master CSV missing columns: {missing}")
+                df = df[required_cols]
+                # Normalize is_active to boolean
+                if df["is_active"].dtype == object:
+                    df["is_active"] = df["is_active"].astype(str).str.lower().map({
+                        "true": True, "false": False, "1": True, "0": False, "yes": True, "no": False
+                    })
+                else:
+                    df["is_active"] = df["is_active"].astype(bool)
+                if df["is_active"].isnull().any():
+                    raise ValueError("store_master CSV has invalid values in is_active column")
                 upsert_table(conn, group_id, org_id, df, "stores")
 
             elif kind == "promo_calendar":
+                required_cols = ["start_date", "end_date", "promo_name", "sku", "promo_type", "discount_pct"]
+                missing = [c for c in required_cols if c not in df.columns]
+                if missing:
+                    raise ValueError(f"promo_calendar CSV missing columns: {missing}")
+                df = df[required_cols]
+                df["start_date"] = pd.to_datetime(df["start_date"], errors="raise")
+                df["end_date"] = pd.to_datetime(df["end_date"], errors="raise")
+                if (df["end_date"] < df["start_date"]).any():
+                    raise ValueError("promo_calendar CSV has end_date earlier than start_date")
+                df["discount_pct"] = pd.to_numeric(df["discount_pct"], errors="raise")
+                if (df["discount_pct"] < 0).any() or (df["discount_pct"] > 100).any():
+                    raise ValueError("promo_calendar CSV has discount_pct outside 0-100 range")
                 upsert_table(conn, group_id, org_id, df, "promos")
 
             else:
                 raise ValueError(f"Unsupported CSV kind: {kind}")
 
-        # 5) Recompute aggregates for THIS group_id
-        agg = aggregate(group_id)
-        if agg:
-            raw, daily = agg
+        # 5) Recompute aggregates for this workspace
+        agg_result = aggregate(group_id)
+        if agg_result:
+            raw, daily = agg_result
             with engine.begin() as conn:
-                # Clear old rows for this workspace
+                # Clear previous daily aggregates for this workspace
                 conn.execute(text("DELETE FROM daily_agg WHERE group_id = :g"), {"g": group_id})
                 daily["group_id"] = group_id
-                daily["org_id"]   = org_id
+                daily["org_id"] = org_id
                 daily.to_sql("daily_agg", conn, if_exists="append", index=False)
 
-            # 6) KPIs + AI narrative
-            metrics   = compute_metrics(raw, daily)
+            # 6) Compute metrics and generate AI narrative
+            metrics = compute_metrics(raw, daily)
             narrative = generate_ai_narrative(metrics)
 
-            # 7) Render Markdown brief
+            # 7) Render weekly brief Markdown content
             week = datetime.utcnow().date().isoformat()
             brief_md = BRIEF_MD_TEMPLATE.render(
                 week=week,
@@ -295,39 +348,44 @@ async def process(req: Request):
                 anomalies=metrics["anomalies"],
             )
 
-            # 8) Save brief row (group_id always; org_id optional)
+            # 8) Insert the brief record into the database
             with engine.begin() as conn:
-                r = conn.execute(
-                    text(
-                        "INSERT INTO briefs (group_id, org_id, content_md) "
-                        "VALUES (:g, :o, :m) RETURNING id"
-                    ),
+                result = conn.execute(
+                    text("INSERT INTO briefs (group_id, org_id, content_md) VALUES (:g, :o, :m) RETURNING id"),
                     {"g": group_id, "o": org_id, "m": brief_md},
                 ).first()
-                brief_id = r[0]
+                brief_id = result[0]
 
-            # 9) PDF → Storage (namespaced by group_id)
-            pdf_bytes = HTML(string=brief_md).write_pdf()
+            # 9) Convert Markdown to PDF and upload to storage
+            brief_html = markdown.markdown(brief_md)
+            full_html = f"<html><head><style>{PDF_CSS}</style></head><body>{brief_html}</body></html>"
+            pdf_bytes = HTML(string=full_html).write_pdf()
             pdf_key = f"{group_id}/brief_{brief_id}.pdf"
-
-            supa.storage.from_("rmc-briefs").upload(
+            supabase.storage.from_("rmc-briefs").upload(
                 pdf_key,
                 pdf_bytes,
                 file_options={"content-type": "application/pdf", "upsert": True},
             )
 
-            # 10) Update brief record with storage path
+            # 10) Update the brief record with the PDF path
             with engine.begin() as conn:
                 conn.execute(
                     text("UPDATE briefs SET pdf_path = :p WHERE id = :id"),
                     {"p": pdf_key, "id": brief_id},
                 )
 
-        # 11) Done
-        supa.table("jobs").update({"status": "done"}).eq("id", job_id).execute()
+        # 11) Mark job as done
+        supabase.table("jobs").update({"status": "done"}).eq("id", job_id).execute()
+        logging.info(f"Job {job_id} completed successfully")
         return JSONResponse({"ok": True, "job_id": job_id})
 
     except Exception as exc:
-        print(f"Error processing job {job_id}: {exc}")
-        supa.table("jobs").update({"status": "failed", "message": str(exc)}).eq("id", job_id).execute()
+        logging.exception(f"Error processing job {job_id}")
+        supabase.table("jobs").update({"status": "failed", "message": str(exc)}).eq("id", job_id).execute()
         raise HTTPException(status_code=500, detail=f"job processing failed: {exc}")
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
