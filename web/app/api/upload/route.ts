@@ -50,20 +50,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: uploadResult.error.message }, { status: 500 });
     }
     // 4) Insert new job record (unchanged)
-    const orgIdForRow = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5]/.test(groupId) ? groupId : null;
-    const { data: jobRow, error: insertError } = await supabase
-      .from("jobs")
-      .insert({
-        group_id: groupId,
-        org_id: orgIdForRow,
-        kind,
-        path,
-        status: "queued",
-        // Optionally, store mapping in jobs table as well (if you added a column for it)
-        // mapping: mapping ? mapping : null
-      })
-      .select("id")
-      .single();
+  const supabaseAdmin = getSupabaseAdminClient();
+  const orgIdForRow = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5]/.test(groupId) ? groupId : null;
+  
+  const { data: jobRow, error: insertError } = await supabaseAdmin  // use admin client
+    .from("jobs")
+    .insert({
+      group_id: groupId,
+      org_id: orgIdForRow,
+      kind,
+      path,
+      status: "queued",
+      ...(mapping ? { mapping: mapping } : {})  // include mapping JSON if column exists
+    })
+    .select("id")
+    .single();
+
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
