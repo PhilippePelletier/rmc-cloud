@@ -1,32 +1,42 @@
-import { auth } from '@clerk/nextjs';
+// web/app/lib/group.ts
+import 'server-only';
+import { auth } from '@clerk/nextjs/server';
 import { createClient } from '@supabase/supabase-js';
 
+// Admin client — uses service role on the server only
 const supaAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!  // server-side only
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // NEVER expose to the browser
+  { auth: { persistSession: false } }
 );
 
 /**
- * Returns:
- * - org UUID (as string) if a Clerk org is selected and mapped
- * - otherwise the Clerk user id
+ * Returns the current "group" identifier and its type.
+ * - If the user is inside a Clerk organization, we use the organization ID.
+ * - Otherwise we use the user's Clerk userId.
+ *
+ * This is the single place to derive group scope for all API routes.
  */
-export async function getCurrentGroupId(): Promise<string> {
+export async function getGroup() {
   const { userId, orgId } = auth();
-  if (!userId) throw new Error('Auth required');
 
-  if (!orgId) return userId;
+  if (!userId) {
+    return { groupId: null as string | null, groupType: null as 'org' | 'user' | null };
+  }
 
-  // Map Clerk org -> local orgs.id (uuid)
-  const { data, error } = await supaAdmin
-    .from('orgs')
-    .select('id, external_id')
-    .eq('external_id', orgId)
-    .maybeSingle();
+  // Prefer org when present
+  if (orgId) {
+    return { groupId: orgId, groupType: 'org' as const };
+  }
 
-  if (error) throw error;
-
-  // If you don’t auto-provision orgs, fall back to personal if mapping is missing
-  return data?.id ?? userId;
+  return { groupId: userId, groupType: 'user' as const };
 }
 
+/**
+ * Optional: ensure there is a row in `orgs` when we see a new orgId.
+ * Call this AFTER getGroup() whenever groupType === 'org'.
+ */
+export async function ensureOrg(orgId: string, name?: string) {
+  if (!orgId) return;
+  await supaAdmin.from('orgs').upsert({ id: orgId, name: name ?? orgId }).eq('id', orgId);
+}
