@@ -8,14 +8,16 @@ type Row = { net_sales: number | null; gm_dollar: number | null };
 
 export async function GET(req: Request) {
   try {
-    const { groupId, supa } = await getApiContext();
+    const context = await getApiContext();
+    if ('error' in context) return context.error;
+    const { groupId, supabase } = context;
 
     // Optional date filters: ?from=YYYY-MM-DD&to=YYYY-MM-DD
     const url = new URL(req.url);
     const from = url.searchParams.get("from");
     const to   = url.searchParams.get("to");
 
-    let q = supa
+    let q = supabase
       .from("daily_agg")
       .select("net_sales, gm_dollar")
       .eq("group_id", groupId);
