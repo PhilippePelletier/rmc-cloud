@@ -1,58 +1,55 @@
-// web/app/api/kpis/route.ts
+// app/api/kpis/route.ts
 import { NextResponse } from "next/server";
-import { supaRls } from "@/app/lib/supabase-rls";     // RLS client using Clerk JWT template "supabase"
-import { getCurrentGroupId } from "@/app/lib/group";  // returns org UUID string if org selected, else userId
+import { getApiContext } from "@/app/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+type DailyAggRow = {
+  date: string;
+  net_sales: number | null;
+  gm_dollar: number | null;
+  units: number | null;
+};
+
+export async function GET(req: Request) {
   try {
-    // 1) Resolve current workspace (org uuid string OR user id)
-    const groupId = await getCurrentGroupId();
+    const { groupId, supa } = await getApiContext();
 
-    // 2) Use RLS-enforced client
-    const supa = await supaRls();
+    // Optional filters: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    const url = new URL(req.url);
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
 
-    // 3) Filter by group_id (TEXT), never org_id
-    const { data: daily, error } = await supa
+    let q = supa
       .from("daily_agg")
       .select("date, net_sales, gm_dollar, units")
-      .eq("group_id", groupId)
-      .order("date", { ascending: true });
+      .eq("group_id", groupId);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (from) q = q.gte("date", from);
+    if (to)   q = q.lte("date", to);
 
-    const rows = daily ?? [];
+    const { data, error } = await q.order("date", { ascending: true });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // 4) Aggregate KPIs
-    const revenue   = rows.reduce((a, r) => a + Number(r.net_sales ?? 0), 0);
+    const rows: DailyAggRow[] = (data ?? []) as DailyAggRow[];
+
+    const revenue   = rows.reduce((a, r) => a + Number(r.net_sales  ?? 0), 0);
     const gm_dollar = rows.reduce((a, r) => a + Number(r.gm_dollar ?? 0), 0);
-    const units     = rows.reduce((a, r) => a + Number(r.units ?? 0), 0);
-    const disc_pct  = 0; // TODO: compute if you track discounts separately
+    const units     = rows.reduce((a, r) => a + Number(r.units     ?? 0), 0);
 
-    // 5) Build time series (net_sales)
-    const trend = rows.map((r) => ({
-      date: r.date as string,
-      revenue: Number(r.net_sales ?? 0),
-    }));
+    const trend = rows.map(r => ({ date: r.date, revenue: Number(r.net_sales ?? 0) }));
 
-    // NOTE: return `series` as an alias for backward-compat with your early dashboard code
     return NextResponse.json({
       revenue,
       gm_dollar,
       gm_pct: revenue ? gm_dollar / revenue : 0,
       units,
-      disc_pct,
+      disc_pct: 0,
       trend,
-      series: trend, // <- legacy alias; safe to keep
+      series: trend, // legacy alias for your dashboard
     });
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : "Unexpected error";
-    return NextResponse.json(
-      { error: msg },
-      { status: /auth required/i.test(msg) ? 401 : 500 }
-    );
+    return NextResponse.json({ error: msg }, { status: /auth required/i.test(msg) ? 401 : 500 });
   }
 }
