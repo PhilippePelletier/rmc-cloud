@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: uploadResult.error.message }, { status: 500 });
     }
     // 4) Insert new job record (unchanged)
-  const supabaseAdmin = getSupabaseAdminClient();
   const orgIdForRow = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5]/.test(groupId) ? groupId : null;
   
   const { data: jobRow, error: insertError } = await supabaseAdmin  // use admin client
