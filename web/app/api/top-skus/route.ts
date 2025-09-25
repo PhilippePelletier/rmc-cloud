@@ -1,36 +1,46 @@
-// web/app/api/top-skus/route.ts
+// app/api/top-skus/route.ts
 import { NextResponse } from "next/server";
-import { supaRls } from "@/app/lib/supabase-rls";     // RLS client (Clerk JWT template "supabase")
-import { getCurrentGroupId } from "@/app/lib/group";  // org UUID string if org selected, else userId
+import { getApiContext } from "@/app/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+type Row = {
+  sku: string | null;
+  net_sales: number | null;
+  gm_dollar: number | null;
+  units: number | null;
+  date?: string | null; // only used if you pass from/to
+};
+
+export async function GET(req: Request) {
   try {
-    // 1) Resolve workspace (org uuid string OR user id)
-    const groupId = await getCurrentGroupId();
+    const { groupId, supa } = await getApiContext();
 
-    // 2) Use RLS-enforced client
-    const supa = await supaRls();
+    // Optional query params: ?from=YYYY-MM-DD&to=YYYY-MM-DD&top=10
+    const url  = new URL(req.url);
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
+    const top  = Math.max(1, Math.min(50, Number(url.searchParams.get("top") ?? 10)));
 
-    // 3) Filter by group_id (TEXT), not org_id
-    const { data, error } = await supa
+    let q = supa
       .from("sales")
-      .select("sku, net_sales, gm_dollar, units")
+      .select("sku, net_sales, gm_dollar, units, date")
       .eq("group_id", groupId);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (from) q = q.gte("date", from);
+    if (to)   q = q.lte("date", to);
 
-    // 4) Aggregate values by SKU
+    const { data, error } = await q;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Aggregate by SKU
     const agg: Record<string, { revenue: number; gm_dollar: number; units: number }> = {};
-    for (const row of data ?? []) {
-      const sku = (row as any).sku || "Unknown";
+    for (const r of (data ?? []) as Row[]) {
+      const sku = r.sku ?? "Unknown";
       agg[sku] ??= { revenue: 0, gm_dollar: 0, units: 0 };
-      agg[sku].revenue   += Number((row as any).net_sales ?? 0);
-      agg[sku].gm_dollar += Number((row as any).gm_dollar ?? 0);
-      agg[sku].units     += Number((row as any).units ?? 0);
+      agg[sku].revenue   += Number(r.net_sales  ?? 0);
+      agg[sku].gm_dollar += Number(r.gm_dollar ?? 0);
+      agg[sku].units     += Number(r.units     ?? 0);
     }
 
     const rows = Object.entries(agg)
@@ -42,14 +52,14 @@ export async function GET() {
         units: v.units,
       }))
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10); // top 10 by revenue
+      .slice(0, top);
 
     return NextResponse.json({ rows });
   } catch (e: any) {
+    const msg = typeof e?.message === "string" ? e.message : "Unexpected error";
     return NextResponse.json(
-      { error: e?.message || "Unexpected error" },
-      { status: /auth required/i.test(e?.message) ? 401 : 500 }
+      { error: msg },
+      { status: /auth required/i.test(msg) ? 401 : 500 }
     );
   }
 }
-
