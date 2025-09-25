@@ -13,8 +13,14 @@ function isUuidLike(s: string) {
 export async function POST(req: NextRequest) {
   try {
     // 1) Auth and Supabase setup (no changes)
-    const { groupId, supabase, groupType } = await getApiContext();
-    if ("error" in (groupId as any)) return groupId;
+    const context = await getApiContext();
+    if ('error' in context) {
+      // `context.error` already is a NextResponse (e.g. a 401 JSON error)
+      return context.error;
+    }
+    const { groupId, supabase } = context;
+// ... proceed as normal
+
 
     // 2) Parse the multipart form data
     const form = await req.formData();
