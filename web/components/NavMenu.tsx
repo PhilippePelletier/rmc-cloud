@@ -1,32 +1,28 @@
+// web/components/NavMenu.tsx
 'use client';
 import { useState } from 'react';
-import { SignedIn } from '@clerk/nextjs';
+import Link from 'next/link';
 
 export default function NavMenu() {
   const [open, setOpen] = useState(false);
-
   return (
     <div className="flex items-center gap-4">
-      <a href="/" className="h1">RMC Cloud</a>
-      <SignedIn>
-        {/* Mobile menu toggle button (visible on small screens) */}
-        <button
-          className="md:hidden btn px-3 py-2"
-          onClick={() => setOpen(!open)}
-          aria-label="Toggle navigation menu"
-        >
-          ☰
-        </button>
-        {/* Navigation links (shown if signed in) */}
-        <nav
-          className={`${open ? 'flex flex-col space-y-2' : 'hidden'} md:flex md:flex-row md:space-y-0 items-center gap-2`}
-        >
-          <a className="btn" href="/dashboard">Dashboard</a>
-          <a className="btn" href="/uploads">Uploads</a>
-          <a className="btn" href="/jobs">Jobs</a>
-          <a className="btn" href="/brief">Brief</a>
-        </nav>
-      </SignedIn>
+      <Link href="/" className="h1">RMC Cloud</Link>
+      {/* Mobile menu toggle */}
+      <button
+        className="md:hidden btn px-3 py-2"
+        onClick={() => setOpen(!open)}
+        aria-label="Toggle navigation menu"
+      >
+        ☰
+      </button>
+      {/* Navigation links */}
+      <nav className={`${open ? 'flex flex-col' : 'hidden'} md:flex md:flex-row items-center gap-2`}>
+        <Link className="btn" href="/dashboard">Dashboard</Link>
+        <Link className="btn" href="/uploads">Uploads</Link>
+        <Link className="btn" href="/jobs">Jobs</Link>
+        <Link className="btn" href="/brief">Brief</Link>
+      </nav>
     </div>
   );
 }
