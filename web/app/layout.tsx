@@ -1,9 +1,8 @@
-// web/app/layout.tsx
+// app/layout.tsx
 import './globals.css';
 import ToasterClient from '@/components/ToasterClient';
 import NavMenu from '@/components/NavMenu';
-import { SessionContextProvider } from '@supabase/auth-helpers-react';
-import { createBrowserClient } from '@supabase/auth-helpers-nextjs';
+import SupabaseProvider from '@/components/SupabaseProvider';
 import Link from 'next/link';
 
 export const metadata = {
@@ -12,38 +11,27 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Initialize Supabase client (will use cookies for auth)
-  const supabase = createBrowserClient();
-
   return (
-    <SessionContextProvider supabaseClient={supabase}>
-      <html lang="en">
-        <body>
-          {/* Toast notifications */}
-          <ToasterClient />
-
+    <html lang="en">
+      <body>
+        <SupabaseProvider>
           <div className="container py-6">
             <header className="mb-6 flex items-center justify-between gap-3">
-              {/* Logo and navigation */}
               <NavMenu />
-
-              {/* Right side: Sign-in/Sign-out links */}
               <div className="flex items-center gap-3">
-                {/* For simplicity, always show sign-in/sign-up.
-                    (You could use a client hook to show a sign-out when session exists.) */}
                 <Link className="btn" href="/sign-in">Sign In</Link>
                 <Link className="btn" href="/sign-up">Sign Up</Link>
               </div>
             </header>
-
-            {/* Main content */}
+            <ToasterClient />
             {children}
           </div>
-        </body>
-      </html>
-    </SessionContextProvider>
+        </SupabaseProvider>
+      </body>
+    </html>
   );
 }
+
 
 
 
