@@ -12,9 +12,17 @@ export async function getApiContext() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set({ name, value, ...options }),
-        remove: (name, options) => cookieStore.set({ name, value: '', ...options, maxAge: 0 }),
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: Parameters<typeof cookieStore.set>[2]) {
+          // Ensure we don't return a value (type expects void)
+          cookieStore.set(name, value, options);
+        },
+        remove(name: string, options: Parameters<typeof cookieStore.set>[2]) {
+          // Clear cookie by setting empty value + maxAge 0
+          cookieStore.set(name, '', { ...options, maxAge: 0 });
+        },
       },
     }
   );
@@ -24,6 +32,6 @@ export async function getApiContext() {
     return { error: NextResponse.json({ error: 'Auth required' }, { status: 401 }) } as const;
   }
 
-  const groupId = data.user.id; // same semantics you already use
+  const groupId = data.user.id; // your routes already use this
   return { supabase, groupId } as const;
 }
