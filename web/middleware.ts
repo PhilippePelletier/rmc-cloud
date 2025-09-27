@@ -25,7 +25,14 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const publicPaths = new Set(['/', '/sign-in', '/sign-up']);
+  const publicPaths = new Set<string>([
+    '/',
+    '/sign-in',
+    '/sign-up',
+    '/api/auth/set',      // <— allow cookie sync route
+    '/auth/callback'      // (if you add an OAuth callback page later)
+  ]);
+
   const { pathname } = req.nextUrl;
 
   if (!publicPaths.has(pathname) && !session) {
