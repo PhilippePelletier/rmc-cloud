@@ -1,15 +1,17 @@
+// app/sign-in/page.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 
-export default function SignInPage() {
+export const dynamic = 'force-dynamic'; // avoid static pre-rendering
+
+function SignInInner() {
   const router = useRouter();
   const params = useSearchParams();
   const redirectedFrom = params.get('redirectedFrom') || '/dashboard';
 
-  // Create a browser Supabase client (works with @supabase/ssr)
   const supabase = useMemo(
     () =>
       createBrowserClient(
@@ -30,42 +32,25 @@ export default function SignInPage() {
     setErrorMsg('');
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     setLoading(false);
 
     if (error) {
-      // Surface the exact code & message so we know what's wrong
       setErrorMsg(`${error.code ?? 'auth_error'}: ${error.message}`);
       return;
     }
-
-    // Optional: If email confirmation is required and user isn’t confirmed,
-    // supabase may return no session here. Handle that:
     if (!data.session) {
-      setErrorMsg('No session returned. Check if email is confirmed in Supabase Auth settings.');
+      setErrorMsg('No session returned. Check email confirmation settings in Supabase Auth.');
       return;
     }
-
     router.push(redirectedFrom);
   }
 
-  async function handleGoogle() {
+  async function handleOAuth(provider: 'google' | 'linkedin_oidc') {
     setErrorMsg('');
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin + '/dashboard' },
-    });
-    if (error) setErrorMsg(`${error.code ?? 'oauth_error'}: ${error.message}`);
-  }
-
-  async function handleLinkedIn() {
-    setErrorMsg('');
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'linkedin_oidc',
+      provider,
       options: { redirectTo: window.location.origin + '/dashboard' },
     });
     if (error) setErrorMsg(`${error.code ?? 'oauth_error'}: ${error.message}`);
@@ -93,7 +78,7 @@ export default function SignInPage() {
           placeholder="Email"
           required
           value={email}
-          onChange={e => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           className="input w-full"
           autoComplete="email"
         />
@@ -102,7 +87,7 @@ export default function SignInPage() {
           placeholder="Password"
           required
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           className="input w-full"
           autoComplete="current-password"
         />
@@ -113,10 +98,10 @@ export default function SignInPage() {
 
         <div className="text-center text-sm mt-2">or</div>
 
-        <button type="button" className="btn w-full" onClick={handleGoogle}>
+        <button type="button" className="btn w-full" onClick={() => handleOAuth('google')}>
           Continue with Google
         </button>
-        <button type="button" className="btn w-full" onClick={handleLinkedIn}>
+        <button type="button" className="btn w-full" onClick={() => handleOAuth('linkedin_oidc')}>
           Continue with LinkedIn
         </button>
 
@@ -134,3 +119,10 @@ export default function SignInPage() {
   );
 }
 
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<div />}>
+      <SignInInner />
+    </Suspense>
+  );
+}
