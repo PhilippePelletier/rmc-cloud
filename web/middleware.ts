@@ -1,24 +1,33 @@
 // middleware.ts
 import { NextResponse, type NextRequest } from 'next/server';
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 
 export async function middleware(req: NextRequest) {
-  // Create a response we can pass to the helper (it will refresh cookies if needed)
   const res = NextResponse.next();
 
-  // Initialize a Supabase client bound to this request/response
-  const supabase = createMiddlewareClient({ req, res });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (name) => req.cookies.get(name)?.value,
+        set: (name, value, options) => {
+          res.cookies.set({ name, value, ...options });
+        },
+        remove: (name, options) => {
+          res.cookies.set({ name, value: '', ...options, maxAge: 0 });
+        },
+      },
+    }
+  );
 
-  // Read current session from cookies (will auto-refresh if expired)
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // Public paths (no auth needed)
-  const publicPaths = new Set<string>(['/', '/sign-in', '/sign-up']);
+  const publicPaths = new Set(['/', '/sign-in', '/sign-up']);
   const { pathname } = req.nextUrl;
 
-  // Redirect unauthenticated users away from protected pages
   if (!publicPaths.has(pathname) && !session) {
     const url = req.nextUrl.clone();
     url.pathname = '/sign-in';
@@ -26,11 +35,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Continue to the requested route
   return res;
 }
 
-// Apply to everything except Next internals and static assets
 export const config = {
   matcher: ['/((?!_next|.*\\..*).*)'],
 };
