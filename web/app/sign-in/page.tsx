@@ -27,25 +27,47 @@ function SignInInner() {
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
-  async function handlePasswordSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg('');
-    setLoading(true);
+async function handlePasswordSignIn(e: React.FormEvent) {
+  e.preventDefault();
+  setErrorMsg('');
+  setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    setLoading(false);
+  setLoading(false);
 
-    if (error) {
-      setErrorMsg(`${error.code ?? 'auth_error'}: ${error.message}`);
-      return;
-    }
-    if (!data.session) {
-      setErrorMsg('No session returned. Check email confirmation settings in Supabase Auth.');
-      return;
-    }
-    router.push(redirectedFrom);
+  if (error) {
+    setErrorMsg(`${error.code ?? 'auth_error'}: ${error.message}`);
+    return;
   }
+
+  // Get current session from the browser client
+  const { data: sess } = await supabase.auth.getSession();
+  const at = sess?.session?.access_token;
+  const rt = sess?.session?.refresh_token;
+
+  if (!at || !rt) {
+    setErrorMsg('No session returned. Check email confirmation settings in Supabase Auth.');
+    return;
+  }
+
+  // Sync to server cookies
+  const r = await fetch('/api/auth/set', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ access_token: at, refresh_token: rt }),
+  });
+
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    setErrorMsg(`cookie_sync_error: ${body?.error ?? r.statusText}`);
+    return;
+  }
+
+  // Now the middleware will see an authenticated session
+  router.push(redirectedFrom);
+}
+
 
   async function handleOAuth(provider: 'google' | 'linkedin_oidc') {
     setErrorMsg('');
