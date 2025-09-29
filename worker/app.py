@@ -15,7 +15,7 @@ import openai
 from weasyprint import HTML
 import markdown
 
-app = FastAPI(title="RMC Cloud Worker")
+app = FastAPI(title="RMC Cloud Work")
 
 # -----------------------------------------------------------------------------#
 # Config
@@ -24,6 +24,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # service role key
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")         # direct Postgres URL
 SECRET = os.getenv("WORKER_SHARED_SECRET", "")
+UPLOADS_BUCKET = os.getenv("SUPABASE_UPLOADS_BUCKET", "rmc-uploads")
+BRIEFS_BUCKET  = os.getenv("SUPABASE_BRIEFS_BUCKET",  "rmc-briefs")
+
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if OPENAI_API_KEY:
@@ -174,7 +177,7 @@ def compute_metrics(raw: pd.DataFrame, daily: pd.DataFrame) -> Dict[str, Any]:
                     "date": str(date),
                     "category": cat_name,
                     "revenue": float(revenue_val),
-                    "delta_pct": mean and mean != 0.0 ? ((revenue_val - mean) / mean) * 100 : 0.0
+                    "delta_pct": float(((revenue_val - mean) / mean) * 100) if mean else 0.0
                 })  # Note: If mean is 0, delta_pct is set to 0.
 
     return {
@@ -235,12 +238,12 @@ async def process(req: Request):
         raise HTTPException(status_code=401, detail="unauthorized")
 
     payload = await req.json()
-    job_id = int(payload.get("job_id", 0))
+    job_id = str(payload.get("job_id") or "").strip()
     # NEW: get mapping from payload if present
     mapping = payload.get("mapping")
 
     if not job_id:
-        raise HTTPException(status_code=400, detail="missing job_id")
+        raise HTTPException(status_code=400, detail="missing or invalid job_id")
 
     # 1) Retrieve job record (contains group_id and optional org_id) - unchanged
     job = supabase.table("jobs").select("*").eq("id", job_id).single().execute().data
@@ -260,7 +263,8 @@ async def process(req: Request):
         logging.info(f"Started processing job {job_id} (kind='{kind}', group_id='{group_id}')")
 
         # 3) Load the uploaded CSV from storage
-        df = download_csv("rmc-uploads", path)
+        df = download_csv(UPLOADS_BUCKET, path)
+
 
         # 3.5) Apply field mapping if provided
         if mapping:
@@ -363,10 +367,12 @@ async def process(req: Request):
             full_html = f"<html><head><style>{PDF_CSS}</style></head><body>{brief_html}</body></html>"
             pdf_bytes = HTML(string=full_html).write_pdf()
             pdf_key = f"{group_id}/brief_{brief_id}.pdf"
-            supabase.storage.from_("rmc-briefs").upload(
+            supabase.storage.from_(BRIEFS_BUCKET).upload(
                 pdf_key,
                 pdf_bytes,
                 file_options={"content-type": "application/pdf", "upsert": True},
+            )
+
             )
 
             # 10) Update the brief record with the PDF path
@@ -379,12 +385,13 @@ async def process(req: Request):
         # 11) Mark job as done
         supabase.table("jobs").update({"status": "done"}).eq("id", job_id).execute()
         logging.info(f"Job {job_id} completed successfully")
-        return JSONResponse({"ok": True, "job_id": job_id})
+        try:
+            return JSONResponse({"ok": True, "job_id": job_id})
 
-        except Exception as exc:
-        logging.exception(f"Error processing job {job_id}")
-        supabase.table("jobs").update({"status": "failed", "message": str(exc)}).eq("id", job_id).execute()
-        raise HTTPException(status_code=500, detail=f"job processing failed: {exc}")
+            except Exception as exc:
+                logging.exception(f"Error processing job {job_id}")
+                supabase.table("jobs").update({"status": "failed", "message": str(exc)}).eq("id", job_id).execute()
+                raise HTTPException(status_code=500, detail=f"job processing failed: {exc}")
 
 
 @app.get("/health")
