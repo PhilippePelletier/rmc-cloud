@@ -23,11 +23,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
-# Railway/Heroku-style dynamic port
-EXPOSE 8000
-ENV PORT=8000
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
+EXPOSE 8080
+# IMPORTANT: bind to $PORT (Railway sets it at runtime)
+CMD sh -c 'uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}'
 
 # Optional: basic liveness check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD \
   wget -qO- http://127.0.0.1:${PORT}/health || exit 1
+
