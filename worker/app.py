@@ -136,6 +136,7 @@ def upsert_table(conn, group_id: str, org_id: Optional[str], df: pd.DataFrame, t
     out["group_id"] = group_id
     out["org_id"] = org_id  # org_id can be None
     if table == "sales":
+        df["store_id"] = df["store_id"].astype(str)
         # Bulk upsert for sales: ignore duplicates on (group_id, date, store_id, sku)
         records = out.to_dict(orient="records")
         conn.execute(text("""
