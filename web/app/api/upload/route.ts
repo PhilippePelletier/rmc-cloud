@@ -110,30 +110,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 6) Notify worker
+        // 6) Notify worker
     const payload: any = { job_id: jobRow.id };
     if (mapping) payload.mapping = mapping;
-
+    
     const workerUrl = process.env.WORKER_URL;
     let worker_notified = false;
+    let worker_status: number | null = null;
+    let worker_text: string | null = null;
+    
     if (workerUrl) {
-      const res = await fetch(`${workerUrl}/jobs/process`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-RMC-Secret": process.env.WORKER_SHARED_SECRET || "",
-        },
-        body: JSON.stringify(payload),
-      }).catch(() => null);
-      worker_notified = !!res?.ok;
+      try {
+        const res = await fetch(`${workerUrl}/jobs/process`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-RMC-Secret": process.env.WORKER_SHARED_SECRET || "",
+          },
+          body: JSON.stringify(payload),
+        });
+        worker_notified = res.ok;
+        worker_status = res.status;
+        worker_text = await res.text().catch(() => null);
+      } catch (e: any) {
+        worker_text = e?.message || String(e);
+      }
     }
-
+    
     return NextResponse.json({
       status: "queued",
       job_id: jobRow.id,
       worker_notified,
+      worker_status,
+      worker_text,
       storage: { bucket: UPLOADS_BUCKET, path },
     });
+
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : "Unexpected error";
     const status = /auth required/i.test(msg) ? 401 : 500;
