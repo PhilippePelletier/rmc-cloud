@@ -1,5 +1,5 @@
 fastapi==0.115.0
-uvicorn==0.30.5
+uvicorn==0.30.
 pandas==2.2.2
 numpy==1.26.4
 SQLAlchemy==2.0.35
