@@ -15,6 +15,16 @@ import openai
 from weasyprint import HTML
 import markdown
 
+# --- add this around your WeasyPrint import ---
+WEASY_OK = True
+try:
+    from weasyprint import HTML
+except Exception as _we_err:
+    WEASY_OK = False
+    HTML = None  # type: ignore
+    logging.warning("WeasyPrint unavailable: %s", _we_err)
+
+
 app = FastAPI(title="RMC Cloud Work")
 
 # -----------------------------------------------------------------------------#
@@ -408,22 +418,27 @@ async def process(req: Request):
                 brief_id = row[0]
 
             # 8) Render PDF + upload to Storage
-            brief_html = markdown.markdown(brief_md)
-            full_html  = f"<html><head><style>{PDF_CSS}</style></head><body>{brief_html}</body></html>"
-            pdf_bytes  = HTML(string=full_html).write_pdf()
-            pdf_key    = f"{group_id}/brief_{brief_id}.pdf"
+            # 8) Render PDF + upload to Storage
+            if WEASY_OK:
+                brief_html = markdown.markdown(brief_md)
+                full_html  = f"<html><head><style>{PDF_CSS}</style></head><body>{brief_html}</body></html>"
+                pdf_bytes  = HTML(string=full_html).write_pdf()
+                pdf_key    = f"{group_id}/brief_{brief_id}.pdf"
+            
+                up_res = supabase.storage.from_("rmc-briefs").upload(
+                    pdf_key,
+                    pdf_bytes,
+                    file_options={"content-type": "application/pdf", "upsert": True},
+                )
+                if up_res.error:
+                    raise RuntimeError(f"brief upload failed: {up_res.error.message}")
+            
+                with engine.begin() as conn:
+                    conn.execute(text("UPDATE briefs SET pdf_path = :p WHERE id = :id"),
+                                 {"p": pdf_key, "id": brief_id})
+            else:
+                logging.warning("Skipping PDF generation: WeasyPrint not available")
 
-            up_res = supabase.storage.from_(BRIEFS_BUCKET).upload(
-                pdf_key,
-                pdf_bytes,
-                file_options={"content-type": "application/pdf", "upsert": True},
-            )
-            if up_res.error:
-                raise RuntimeError(f"brief upload failed: {up_res.error.message}")
-
-            with engine.begin() as conn:
-                conn.execute(text("UPDATE briefs SET pdf_path = :p WHERE id = :id"),
-                             {"p": pdf_key, "id": brief_id})
 
         # 9) Done
         supabase.table("jobs").update({"status": "done", "message": None}).eq("id", job_id).execute()
