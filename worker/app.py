@@ -427,9 +427,19 @@ async def process(req: Request):
                 pdf_key    = f"{group_id}/brief_{brief_id}.pdf"
             
                 up_res = supabase.storage.from_("rmc-briefs").upload(
-                    pdf_key,
-                    pdf_bytes,
-                    file_options={"content-type": "application/pdf", "upsert": True},
+                            pdf_key,
+                            pdf_bytes,  # bytes from WeasyPrint
+                            # ✅ use strings; and use "contentType" (SDK maps it), not "content-type"
+                            file_options={"contentType": "application/pdf", "upsert": "true"},
+                        )
+                            
+                        # 2) If you also upload CSVs in Python anywhere, same pattern:
+                        supabase.storage.from_("rmc-uploads").upload(
+                            csv_path,
+                            csv_bytes,
+                            {"contentType": "text/csv", "upsert": "true"},
+                        )
+
                 )
                 if up_res.error:
                     raise RuntimeError(f"brief upload failed: {up_res.error.message}")
