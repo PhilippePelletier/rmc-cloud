@@ -451,7 +451,13 @@ async def process(req: Request):
         raise HTTPException(status_code=500, detail=f"job processing failed: {exc}")
 
 
+# app.py (top already has: app = FastAPI(...))
+
+@app.get("/")
+def root():
+    return {"ok": True}
+
 @app.get("/health")
-async def health():
+def health():
     return {"status": "ok"}
 
