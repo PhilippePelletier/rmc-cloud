@@ -434,21 +434,21 @@ async def process(req: Request):
                         )
                             
                         # 2) If you also upload CSVs in Python anywhere, same pattern:
-                        supabase.storage.from_("rmc-uploads").upload(
+                supabase.storage.from_("rmc-uploads").upload(
                             csv_path,
                             csv_bytes,
                             {"contentType": "text/csv", "upsert": "true"},
                         )
 
                 )
-                if up_res.error:
+            if up_res.error:
                     raise RuntimeError(f"brief upload failed: {up_res.error.message}")
             
-                with engine.begin() as conn:
+            with engine.begin() as conn:
                     conn.execute(text("UPDATE briefs SET pdf_path = :p WHERE id = :id"),
                                  {"p": pdf_key, "id": brief_id})
-            else:
-                logging.warning("Skipping PDF generation: WeasyPrint not available")
+        else:
+            logging.warning("Skipping PDF generation: WeasyPrint not available")
 
 
         # 9) Done
