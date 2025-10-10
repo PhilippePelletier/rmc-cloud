@@ -1,142 +1,210 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
-import dayjs from 'dayjs';
+
+import { useEffect, useState, useMemo } from 'react';
+import toast from 'react-hot-toast';
 
 type Job = {
   id: string;
+  path: string;
   kind: string;
   status: string;
-  message: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string | null;
 };
 
-export default function Jobs() {
-  const [jobs, setJobs] = useState<Job[] | null>(null);
-  const [err, setErr] = useState('');
-  const [launching, setLaunching] = useState<Record<string, boolean>>({});
+export default function JobsPage() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
 
-  const loadJobs = useCallback(async () => {
+  const setBusy = (id: string, v: boolean) =>
+    setBusyIds((prev) => ({ ...prev, [id]: v }));
+
+  // Fetch jobs via GET /api/jobs
+  const fetchJobs = async () => {
     try {
-      setErr('');
-      const res = await fetch('/api/jobs', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load jobs');
-      setJobs((data.jobs || []) as Job[]);
-    } catch (e: any) {
-      setErr(e.message || String(e));
-      setJobs([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
-
-  const relaunch = async (id: string) => {
-    try {
-      // mark this row as busy
-      setLaunching(prev => ({ ...prev, [id]: true }));
-
-      // optimistic UI: update the row locally
-      setJobs(prev =>
-        (prev || []).map(j =>
-          j.id === id
-            ? {
-                ...j,
-                status: 'queued',
-                message: null,
-                updated_at: new Date().toISOString(),
-              }
-            : j
-        )
-      );
-
-      const res = await fetch('/api/jobs/relaunch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
+      setLoading(true);
+      const res = await fetch('/api/jobs');
       const json = await res.json();
-      if (!res.ok) {
-        // revert optimistic update on error
-        await loadJobs();
-        throw new Error(json.error || 'Failed to relaunch job');
-      }
-
-      // (optional) if worker didn’t ack immediately, we still keep it queued
-      // you can surface json.worker_ok if you want to display a subtle warning
-
-      // re-sync from server to be safe
-      await loadJobs();
+      if (!res.ok) throw new Error(json.error || 'Failed to load jobs');
+      setJobs((json.jobs || []) as Job[]);
     } catch (e: any) {
-      alert(e.message || String(e));
+      setError(e.message || 'Unknown error');
     } finally {
-      setLaunching(prev => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  const handleRename = async (job: Job) => {
+    const current = fileNameFromPath(job.path);
+    const newName = window.prompt('Enter new file name (with extension):', current);
+    if (!newName || newName === current) return;
+    try {
+      setBusy(job.id, true);
+      const res = await fetch('/api/jobs/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: job.id, newName }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Rename failed');
+      toast.success('File renamed');
+      fetchJobs();
+    } catch (err: any) {
+      toast.error(err.message || 'Error renaming file');
+    } finally {
+      setBusy(job.id, false);
+    }
+  };
+
+  const handleDelete = async (job: Job) => {
+    if (
+      !confirm(
+        'Deletion is permanent and related processing will be discontinued. Continue?'
+      )
+    )
+      return;
+    try {
+      setBusy(job.id, true);
+      const res = await fetch('/api/jobs/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: job.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Deletion failed');
+      toast.success('Job deleted');
+      fetchJobs();
+    } catch (err: any) {
+      toast.error(err.message || 'Error deleting job');
+    } finally {
+      setBusy(job.id, false);
+    }
+  };
+
+  const handleRelaunch = async (job: Job) => {
+    try {
+      setBusy(job.id, true);
+      const res = await fetch('/api/jobs/relaunch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: job.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Relaunch failed');
+      toast.success('Job relaunched');
+      // optimistic update to reflect queued/running status if API returns it
+      await fetchJobs();
+    } catch (err: any) {
+      toast.error(err.message || 'Error relaunching job');
+    } finally {
+      setBusy(job.id, false);
+    }
+  };
+
+  if (loading) return <p>Loading jobs...</p>;
+  if (error) return <p className="text-red-600">Error: {error}</p>;
+
   return (
-    <main className="grid gap-4">
-      <div className="h2">Recent Jobs</div>
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="h2">Uploaded Jobs</h2>
+        <button className="btn" onClick={fetchJobs}>Refresh</button>
+      </div>
 
-      {err && <div className="card text-red-600">{err}</div>}
-
-      {!err && jobs === null && (
-        <div className="text-sm text-gray-600">Loading jobs...</div>
-      )}
-
-      {!err && jobs !== null && jobs.length === 0 && (
-        <div className="card">No jobs found.</div>
-      )}
-
-      {jobs && jobs.length > 0 && (
-        <div className="card overflow-x-auto">
+      {jobs.length === 0 ? (
+        <p>No jobs found. Upload a CSV on the Uploads page.</p>
+      ) : (
+        <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left">
+              <tr className="text-left border-b">
                 <th className="p-2">ID</th>
-                <th className="p-2">Kind</th>
+                <th className="p-2">File Name</th>
+                <th className="p-2">Type</th>
                 <th className="p-2">Status</th>
-                <th className="p-2">Created</th>
-                <th className="p-2">Updated</th>
-                <th className="p-2">Message</th>
+                <th className="p-2">Uploaded At</th>
                 <th className="p-2">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {jobs.map((j) => (
-                <tr key={j.id} className="border-t">
-                  <td className="p-2">{j.id}</td>
-                  <td className="p-2">{j.kind}</td>
-                  <td className="p-2">{j.status}</td>
-                  <td className="p-2">
-                    {dayjs(j.created_at).format('YYYY-MM-DD HH:mm')}
-                  </td>
-                  <td className="p-2">
-                    {dayjs(j.updated_at).format('YYYY-MM-DD HH:mm')}
-                  </td>
-                  <td className="p-2">{j.message || ''}</td>
-                  <td className="p-2">
-                    <button
-                      className="btn"
-                      onClick={() => relaunch(j.id)}
-                      disabled={!!launching[j.id]}
-                      title="Re-queue this job and notify the worker"
-                    >
-                      {launching[j.id] ? 'Relaunching…' : 'Relaunch'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {jobs.map((job) => {
+                const fileName = fileNameFromPath(job.path);
+                const isBusy = !!busyIds[job.id];
+                return (
+                  <tr key={job.id} className="border-t">
+                    <td className="p-2">{job.id}</td>
+                    <td className="p-2">{fileName}</td>
+                    <td className="p-2">{job.kind}</td>
+                    <td className="p-2">
+                      <span
+                        className={
+                          'inline-flex items-center px-2 py-0.5 rounded text-xs ' +
+                          statusClass(job.status)
+                        }
+                      >
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="p-2">
+                      {new Date(job.created_at).toLocaleString()}
+                    </td>
+                    <td className="p-2 space-x-2">
+                      <button
+                        className="btn text-sm"
+                        onClick={() => handleRename(job)}
+                        disabled={isBusy}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="btn text-sm"
+                        onClick={() => handleRelaunch(job)}
+                        disabled={isBusy}
+                      >
+                        Relaunch
+                      </button>
+                      <button
+                        className="btn text-sm text-red-600"
+                        onClick={() => handleDelete(job)}
+                        disabled={isBusy}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
-    </main>
+    </div>
+  );
+}
+
+function fileNameFromPath(path: string) {
+  const parts = (path || '').split('/');
+  const fileWithTs = parts[parts.length - 1] || '';
+  // preserve everything after the first hyphen so renames keep the user-facing filename
+  return fileWithTs.includes('-')
+    ? fileWithTs.substring(fileWithTs.indexOf('-') + 1)
+    : fileWithTs;
+}
+
+function statusClass(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'done') return 'bg-green-100 text-green-800';
+  if (s === 'failed') return 'bg-red-100 text-red-800';
+  if (s === 'running') return 'bg-blue-100 text-blue-800';
+  if (s === 'queued' || s === 'pending') return 'bg-amber-100 text-amber-800';
+  return 'bg-gray-100 text-gray-800';
+}
+
   );
 }
