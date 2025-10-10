@@ -13,7 +13,7 @@ export async function GET() {
   // 2) Query jobs for this workspace (limit 20, latest first)
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, kind, status, message, created_at, updated_at")
+    .select("id, display_name, kind, status, message, created_at, updated_at")
     .eq("group_id", groupId)               // scope to current user/org
     .order("created_at", { ascending: false })
     .limit(20);
