@@ -433,7 +433,6 @@ async def process(req: Request):
 -                        )
 -                
 -
-            )
                  up_res = supabase.storage.from_("rmc-briefs").upload(
                              pdf_key,
                              pdf_bytes,
