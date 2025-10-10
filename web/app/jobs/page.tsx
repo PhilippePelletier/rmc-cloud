@@ -3,6 +3,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
+/* ----------------------------------------------------------------------------
+   Types
+---------------------------------------------------------------------------- */
 type Job = {
   id: string;
   path: string;
@@ -12,11 +15,22 @@ type Job = {
   updated_at?: string | null;
   // If your API starts returning this, we'll prefer it:
   display_name?: string | null;
+
+  // NEW (non-breaking): used for folder filtering and drag-to-file
+  folder_id?: string | null;
+};
+
+type FolderRow = {
+  id: string;
+  name: string;
 };
 
 const STATUSES = ['all', 'queued', 'running', 'done', 'failed'] as const;
 type StatusFilter = (typeof STATUSES)[number];
 
+/* ----------------------------------------------------------------------------
+   Page
+---------------------------------------------------------------------------- */
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,9 +39,21 @@ export default function JobsPage() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
 
+  // NEW: folders
+  const [folders, setFolders] = useState<FolderRow[]>([]);
+  const [activeFolder, setActiveFolder] = useState<'ALL' | 'UNFILED' | string>('ALL');
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  // If you have group/org in session, wire it here. Safe fallback ''.
+  const groupId = '';
+
   const setBusy = (id: string, v: boolean) =>
     setBusyIds((prev) => ({ ...prev, [id]: v }));
 
+  /* ----------------------------------------
+     Fetchers
+  ---------------------------------------- */
   async function fetchJobs() {
     try {
       setLoading(true);
@@ -42,10 +68,31 @@ export default function JobsPage() {
     }
   }
 
+  async function fetchFolders() {
+    try {
+      const res = await fetch(`/api/folders/list?group_id=${encodeURIComponent(groupId)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load folders');
+      setFolders((json.folders || []) as FolderRow[]);
+    } catch (e: any) {
+      // Non-fatal to the jobs page
+      console.warn(e?.message || e);
+    }
+  }
+
   useEffect(() => {
     fetchJobs();
   }, []);
 
+  useEffect(() => {
+    // load folders once (or whenever groupId changes)
+    fetchFolders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId]);
+
+  /* ----------------------------------------
+     Derived list
+  ---------------------------------------- */
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -53,10 +100,21 @@ export default function JobsPage() {
       const matchesQuery =
         !q || name.includes(q) || j.kind.toLowerCase().includes(q);
       const matchesStatus = status === 'all' || j.status.toLowerCase() === status;
-      return matchesQuery && matchesStatus;
-    });
-  }, [jobs, query, status]);
 
+      const matchesFolder =
+        activeFolder === 'ALL'
+          ? true
+          : activeFolder === 'UNFILED'
+          ? !j.folder_id
+          : j.folder_id === activeFolder;
+
+      return matchesQuery && matchesStatus && matchesFolder;
+    });
+  }, [jobs, query, status, activeFolder]);
+
+  /* ----------------------------------------
+     Actions (keep your existing ones)
+  ---------------------------------------- */
   async function handleRename(job: Job) {
     const current = displayName(job);
     const newName = window.prompt('Enter new file name (with extension):', current);
@@ -128,7 +186,7 @@ export default function JobsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: job.id }),
       });
-      const json = await res.json();
+    const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Relaunch failed');
       toast.success('Job relaunched');
       fetchJobs();
@@ -139,12 +197,67 @@ export default function JobsPage() {
     }
   }
 
+  /* ----------------------------------------
+     NEW: Folder CRUD + DnD move
+  ---------------------------------------- */
+  async function createFolder() {
+    if (!newFolderName.trim()) return;
+    try {
+      const res = await fetch('/api/folders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFolderName.trim(), group_id: groupId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to create folder');
+      setFolders((prev) => [...prev, json.folder]);
+      setCreatingFolder(false);
+      setNewFolderName('');
+      toast.success('Folder created');
+    } catch (e: any) {
+      toast.error(e?.message || 'Folder creation failed');
+    }
+  }
+
+  function onDragStart(e: React.DragEvent, job: Job) {
+    e.dataTransfer.setData('text/plain', job.id);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function allowDrop(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  async function onDropToFolder(e: React.DragEvent, folderId: string | null) {
+    e.preventDefault();
+    const jobId = e.dataTransfer.getData('text/plain');
+    if (!jobId) return;
+    try {
+      const res = await fetch('/api/jobs/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId, folder_id: folderId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Move failed');
+
+      // local update
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, folder_id: folderId } : j)));
+      toast.success(folderId ? 'Moved to folder' : 'Removed from folder');
+    } catch (e: any) {
+      toast.error(e?.message || 'Move failed');
+    }
+  }
+
+  /* ----------------------------------------
+     Render
+  ---------------------------------------- */
   if (loading) return <p>Loading jobs...</p>;
   if (error) return <p className="text-red-600">Error: {error}</p>;
 
   return (
-    <div className="max-w-5xl mx-auto">
-      {/* Top bar */}
+    <div className="max-w-6xl mx-auto">
+      {/* Top bar (unchanged) */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Files &amp; Jobs</h2>
         <div className="flex w-full gap-2 sm:w-auto">
@@ -176,34 +289,129 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* List */}
-      <div className="divide-y rounded-xl border bg-white/70 backdrop-blur">
-        {filtered.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No results. Try a different search or upload a CSV on the Uploads page.
+      {/* New layout: sidebar + list */}
+      <div className="grid grid-cols-12 gap-4">
+        {/* Sidebar: folders (hidden on small if you want; currently visible) */}
+        <aside className="col-span-12 md:col-span-4 lg:col-span-3">
+          <div className="rounded-xl border bg-white/70 backdrop-blur p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">Folders</h3>
+              <button
+                onClick={() => setCreatingFolder((v) => !v)}
+                className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
+                type="button"
+              >
+                New
+              </button>
+            </div>
+
+            {/* Built-in buckets */}
+            <ul className="space-y-1 mb-2">
+              {[
+                { id: 'ALL', label: 'All' },
+                { id: 'UNFILED', label: 'Unfiled' },
+              ].map((b) => (
+                <li key={b.id}>
+                  <button
+                    onClick={() => setActiveFolder(b.id as any)}
+                    onDragOver={allowDrop}
+                    onDrop={(e) => onDropToFolder(e, b.id === 'UNFILED' ? null : null)}
+                    className={`w-full text-left rounded-md px-2 py-1 text-sm hover:bg-gray-50 ${
+                      activeFolder === b.id ? 'bg-gray-100' : ''
+                    }`}
+                    type="button"
+                  >
+                    {b.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {/* User folders */}
+            <ul className="space-y-1">
+              {folders.map((f) => (
+                <li key={f.id}>
+                  <button
+                    onClick={() => setActiveFolder(f.id)}
+                    onDragOver={allowDrop}
+                    onDrop={(e) => onDropToFolder(e, f.id)}
+                    className={`w-full text-left rounded-md px-2 py-1 text-sm hover:bg-gray-50 ${
+                      activeFolder === f.id ? 'bg-gray-100' : ''
+                    }`}
+                    type="button"
+                  >
+                    {f.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {creatingFolder && (
+              <div className="mt-3 space-y-2">
+                <input
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  className="w-full rounded-md border px-2 py-1 text-sm"
+                  placeholder="Folder name"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
+                    type="button"
+                    onClick={() => setCreatingFolder(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="rounded-md border bg-black px-2 py-1 text-xs text-white"
+                    type="button"
+                    onClick={createFolder}
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          filtered.map((job) => {
-            const isBusy = !!busyIds[job.id];
-            const name = displayName(job);
-            return (
-              <Row
-                key={job.id}
-                job={job}
-                name={name}
-                isBusy={isBusy}
-                onRename={() => handleRename(job)}
-                onRelaunch={() => handleRelaunch(job)}
-                onDelete={() => handleDelete(job)}
-              />
-            );
-          })
-        )}
+        </aside>
+
+        {/* Jobs list (your original list, now filtered by folder) */}
+        <section className="col-span-12 md:col-span-8 lg:col-span-9">
+          <div className="divide-y rounded-xl border bg-white/70 backdrop-blur">
+            {filtered.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No results. Try a different search or upload a CSV on the Uploads page.
+              </div>
+            ) : (
+              filtered.map((job) => {
+                const isBusy = !!busyIds[job.id];
+                const name = displayName(job);
+                return (
+                  <Row
+                    key={job.id}
+                    job={job}
+                    name={name}
+                    isBusy={isBusy}
+                    onRename={() => handleRename(job)}
+                    onRelaunch={() => handleRelaunch(job)}
+                    onDelete={() => handleDelete(job)}
+                    // NEW: make each row draggable
+                    draggable
+                    onDragStart={(e) => onDragStart(e, job)}
+                  />
+                );
+              })
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
+/* ----------------------------------------------------------------------------
+   Row + UI bits (kept, extended with optional drag props)
+---------------------------------------------------------------------------- */
 function Row({
   job,
   name,
@@ -211,6 +419,8 @@ function Row({
   onRename,
   onRelaunch,
   onDelete,
+  draggable = false,
+  onDragStart,
 }: {
   job: Job;
   name: string;
@@ -218,6 +428,9 @@ function Row({
   onRename: () => void;
   onRelaunch: () => void;
   onDelete: () => void;
+  // NEW (non-breaking): allow drag
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -235,7 +448,12 @@ function Row({
   }, []);
 
   return (
-    <div className="flex items-center justify-between p-3 sm:p-4" ref={containerRef}>
+    <div
+      className="flex items-center justify-between p-3 sm:p-4"
+      ref={containerRef}
+      draggable={draggable}
+      onDragStart={onDragStart}
+    >
       {/* Left: status dot + name (ID hidden) */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
