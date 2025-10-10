@@ -1,4 +1,4 @@
-// app/api/uploads/route.ts
+// app/api/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getApiContext } from "@/app/lib/api-ctx";
 import { getSupabaseAdminClient } from "@/app/lib/supabase";
@@ -13,26 +13,6 @@ function isUuidLike(s: string) {
 // Use env to avoid hardcoding. Set on Vercel & Railway.
 const UPLOADS_BUCKET = process.env.SUPABASE_UPLOADS_BUCKET || "rmc-uploads";
 
-// [4a] — small helper to sanitize/normalize a user-provided display name.
-function sanitizeDisplayName(raw: string, extFromFile: string): string | null {
-  if (!raw) return null;
-  let s = raw.trim();
-  if (!s) return null;
-
-  // Disallow path separators and control chars; collapse whitespace
-  s = s.replace(/[\\\/\u0000-\u001F\u007F]+/g, " ").replace(/\s+/g, " ").trim();
-
-  // Optional: cap length to something reasonable
-  if (s.length > 160) s = s.slice(0, 160).trim();
-
-  // Ensure it ends with the uploaded file's extension (so UI expectations match)
-  const dotExt = extFromFile ? `.${extFromFile.toLowerCase()}` : "";
-  if (dotExt && !s.toLowerCase().endsWith(dotExt)) {
-    s = s + dotExt;
-  }
-  return s || null;
-}
-
 export async function POST(req: NextRequest) {
   try {
     // 1) Auth (RLS) — we query later with user client, but uploads use admin (service key)
@@ -46,6 +26,7 @@ export async function POST(req: NextRequest) {
     const file = form.get("file") as File | null;
     const mappingStr = form.get("mapping");
     let mapping: any = null;
+
     if (mappingStr) {
       try {
         mapping = JSON.parse(String(mappingStr));
@@ -53,15 +34,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid mapping JSON" }, { status: 400 });
       }
     }
+
     if (!file || !kind) {
       return NextResponse.json({ error: "Missing file or kind" }, { status: 400 });
     }
-
-    // [4a] Optional display name from form (support both keys)
-    const displayNameRaw =
-      (form.get("display_name") as string | null) ||
-      (form.get("displayName") as string | null) ||
-      null;
 
     // 3) Admin client (bypasses RLS for storage + jobs insert)
     const admin = getSupabaseAdminClient();
@@ -118,17 +94,10 @@ export async function POST(req: NextRequest) {
     };
     if (mapping) insertPayload.mapping = mapping; // only if you added a 'mapping' column to jobs
 
-    // [4a] — if client provided a display name, sanitize & persist it.
-    const normalizedDisplayName =
-      displayNameRaw ? sanitizeDisplayName(String(displayNameRaw), ext) : null;
-    if (normalizedDisplayName) {
-      insertPayload.display_name = normalizedDisplayName;
-    }
-
     const { data: jobRow, error: jobsErr } = await admin
       .from("jobs")
       .insert(insertPayload)
-      .select("id, display_name")
+      .select("id")
       .single();
 
     if (jobsErr) {
@@ -164,12 +133,14 @@ export async function POST(req: NextRequest) {
         });
         worker_notified = res.ok;
         worker_status = res.status;
+        // Read raw text (avoid JSON parse throwing if worker returns HTML/error)
         worker_text = await res.text().catch(() => null);
       } catch (e: any) {
         worker_text = e?.message || String(e);
       }
     }
 
+    // ALWAYS return JSON
     return NextResponse.json({
       status: "queued",
       job_id: jobRow.id,
@@ -177,11 +148,10 @@ export async function POST(req: NextRequest) {
       worker_status,
       worker_text,
       storage: { bucket: UPLOADS_BUCKET, path },
-      // [4a] — return display name too so UI can immediately reflect it
-      display_name: jobRow.display_name ?? normalizedDisplayName ?? null,
     });
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : "Unexpected error";
+    // If Next catches an unhandled exception, it would render HTML. We return JSON here instead.
     const status = /auth required/i.test(msg) ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
