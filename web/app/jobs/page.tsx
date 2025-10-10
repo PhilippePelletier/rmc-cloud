@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 type Job = {
@@ -26,7 +26,7 @@ export default function JobsPage() {
   const setBusy = (id: string, v: boolean) =>
     setBusyIds((prev) => ({ ...prev, [id]: v }));
 
-  const fetchJobs = async () => {
+  async function fetchJobs() {
     try {
       setLoading(true);
       const res = await fetch('/api/jobs');
@@ -38,7 +38,7 @@ export default function JobsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
     fetchJobs();
@@ -47,17 +47,15 @@ export default function JobsPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return jobs.filter((j) => {
+      const name = fileNameFromPath(j.path).toLowerCase();
       const matchesQuery =
-        !q ||
-        fileNameFromPath(j.path).toLowerCase().includes(q) ||
-        j.kind.toLowerCase().includes(q) ||
-        j.id.toLowerCase().includes(q);
+        !q || name.includes(q) || j.kind.toLowerCase().includes(q) || j.id.toLowerCase().includes(q);
       const matchesStatus = status === 'all' || j.status.toLowerCase() === status;
       return matchesQuery && matchesStatus;
     });
   }, [jobs, query, status]);
 
-  const handleRename = async (job: Job) => {
+  async function handleRename(job: Job) {
     const current = fileNameFromPath(job.path);
     const newName = window.prompt('Enter new file name (with extension):', current);
     if (!newName || newName === current) return;
@@ -77,15 +75,13 @@ export default function JobsPage() {
     } finally {
       setBusy(job.id, false);
     }
-  };
+  }
 
-  const handleDelete = async (job: Job) => {
-    if (
-      !confirm(
-        'Deletion is permanent and related processing will be discontinued. Continue?'
-      )
-    )
-      return;
+  async function handleDelete(job: Job) {
+    const ok = window.confirm(
+      'Deletion is permanent and related processing will be discontinued. Continue?'
+    );
+    if (!ok) return;
     try {
       setBusy(job.id, true);
       const res = await fetch('/api/jobs/delete', {
@@ -102,9 +98,9 @@ export default function JobsPage() {
     } finally {
       setBusy(job.id, false);
     }
-  };
+  }
 
-  const handleRelaunch = async (job: Job) => {
+  async function handleRelaunch(job: Job) {
     try {
       setBusy(job.id, true);
       const res = await fetch('/api/jobs/relaunch', {
@@ -121,7 +117,7 @@ export default function JobsPage() {
     } finally {
       setBusy(job.id, false);
     }
-  };
+  }
 
   if (loading) return <p>Loading jobs...</p>;
   if (error) return <p className="text-red-600">Error: {error}</p>;
@@ -129,17 +125,19 @@ export default function JobsPage() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* Top bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h2 className="text-xl font-semibold">Files & Jobs</h2>
-        <div className="flex gap-2 w-full sm:w-auto">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-xl font-semibold">Files &amp; Jobs</h2>
+        <div className="flex w-full gap-2 sm:w-auto">
           <div className="relative flex-1">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search files, kind, or ID…"
-              className="w-full sm:w-72 rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 sm:w-72"
             />
-            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">⌘K</span>
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+              ⌘K
+            </span>
           </div>
           <select
             value={status}
@@ -205,14 +203,16 @@ function Row({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function onDocClick(e: MouseEvent) {
+    const onDocClick = (e: MouseEvent) => {
       if (!containerRef.current) return;
       if (!containerRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
-    }
+    };
     document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
+    return () => {
+      document.removeEventListener('click', onDocClick);
+    };
   }, []);
 
   return (
@@ -224,4 +224,124 @@ function Row({
           <p className="truncate font-medium">{name}</p>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-          <span className="inline-flex items-center rou
+          <span className="inline-flex items-center rounded-full border px-2 py-0.5">{job.kind}</span>
+          <span>•</span>
+          <span>ID: {job.id}</span>
+          <span>•</span>
+          <span>Uploaded {timeAgo(job.created_at)}</span>
+          {job.updated_at ? (
+            <>
+              <span>•</span>
+              <span>Updated {timeAgo(job.updated_at)}</span>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Right: status + menu */}
+      <div className="ml-4 flex items-center gap-3">
+        <StatusPill status={job.status} />
+        <div className="relative">
+          <button
+            className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
+            onClick={() => setMenuOpen((v) => !v)}
+            disabled={isBusy}
+            aria-label="Actions"
+            title="Actions"
+            type="button"
+          >
+            ⋮
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 z-20 mt-2 w-40 overflow-hidden rounded-lg border bg-white shadow-lg">
+              <MenuItem onClick={() => { setMenuOpen(false); onRename(); }}>Rename</MenuItem>
+              <MenuItem onClick={() => { setMenuOpen(false); onRelaunch(); }}>Relaunch</MenuItem>
+              <MenuItem destructive onClick={() => { setMenuOpen(false); onDelete(); }}>
+                Delete
+              </MenuItem>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({
+  children,
+  onClick,
+  destructive,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        'w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ' +
+        (destructive ? 'text-red-600 hover:text-red-700' : '')
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const cls =
+    'h-2.5 w-2.5 rounded-full ' +
+    (status === 'done'
+      ? 'bg-green-500'
+      : status === 'failed'
+      ? 'bg-red-500'
+      : status === 'running'
+      ? 'bg-blue-500'
+      : status === 'queued' || status === 'pending'
+      ? 'bg-amber-500'
+      : 'bg-gray-300');
+  return <span className={cls} />;
+}
+
+function StatusPill({ status }: { status: string }) {
+  const base = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ';
+  const cls =
+    status === 'done'
+      ? base + 'bg-green-100 text-green-800'
+      : status === 'failed'
+      ? base + 'bg-red-100 text-red-800'
+      : status === 'running'
+      ? base + 'bg-blue-100 text-blue-800'
+      : status === 'queued' || status === 'pending'
+      ? base + 'bg-amber-100 text-amber-800'
+      : base + 'bg-gray-100 text-gray-800';
+  return <span className={cls}>{status}</span>;
+}
+
+function fileNameFromPath(path: string) {
+  const parts = (path || '').split('/');
+  const fileWithTs = parts[parts.length - 1] || '';
+  return fileWithTs.includes('-')
+    ? fileWithTs.substring(fileWithTs.indexOf('-') + 1)
+    : fileWithTs;
+}
+
+function timeAgo(iso?: string | null) {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const s = Math.max(1, Math.floor((now - then) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  const y = Math.floor(mo / 12);
+  return `${y}y ago`;
+}
