@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 
 type Job = {
@@ -12,16 +12,20 @@ type Job = {
   updated_at?: string | null;
 };
 
+const STATUSES = ['all', 'queued', 'running', 'done', 'failed'] as const;
+type StatusFilter = (typeof STATUSES)[number];
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<StatusFilter>('all');
 
   const setBusy = (id: string, v: boolean) =>
     setBusyIds((prev) => ({ ...prev, [id]: v }));
 
-  // Fetch jobs via GET /api/jobs
   const fetchJobs = async () => {
     try {
       setLoading(true);
@@ -39,6 +43,19 @@ export default function JobsPage() {
   useEffect(() => {
     fetchJobs();
   }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return jobs.filter((j) => {
+      const matchesQuery =
+        !q ||
+        fileNameFromPath(j.path).toLowerCase().includes(q) ||
+        j.kind.toLowerCase().includes(q) ||
+        j.id.toLowerCase().includes(q);
+      const matchesStatus = status === 'all' || j.status.toLowerCase() === status;
+      return matchesQuery && matchesStatus;
+    });
+  }, [jobs, query, status]);
 
   const handleRename = async (job: Job) => {
     const current = fileNameFromPath(job.path);
@@ -98,8 +115,7 @@ export default function JobsPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Relaunch failed');
       toast.success('Job relaunched');
-      // optimistic update to reflect queued/running status if API returns it
-      await fetchJobs();
+      fetchJobs();
     } catch (err: any) {
       toast.error(err.message || 'Error relaunching job');
     } finally {
@@ -111,97 +127,101 @@ export default function JobsPage() {
   if (error) return <p className="text-red-600">Error: {error}</p>;
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="h2">Uploaded Jobs</h2>
-        <button className="btn" onClick={fetchJobs}>Refresh</button>
+    <div className="max-w-5xl mx-auto">
+      {/* Top bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <h2 className="text-xl font-semibold">Files & Jobs</h2>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="relative flex-1">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search files, kind, or ID…"
+              className="w-full sm:w-72 rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">⌘K</span>
+          </div>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as StatusFilter)}
+            className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s[0].toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+          <button onClick={fetchJobs} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {jobs.length === 0 ? (
-        <p>No jobs found. Upload a CSV on the Uploads page.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="p-2">ID</th>
-                <th className="p-2">File Name</th>
-                <th className="p-2">Type</th>
-                <th className="p-2">Status</th>
-                <th className="p-2">Uploaded At</th>
-                <th className="p-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((job) => {
-                const fileName = fileNameFromPath(job.path);
-                const isBusy = !!busyIds[job.id];
-                return (
-                  <tr key={job.id} className="border-t">
-                    <td className="p-2">{job.id}</td>
-                    <td className="p-2">{fileName}</td>
-                    <td className="p-2">{job.kind}</td>
-                    <td className="p-2">
-                      <span
-                        className={
-                          'inline-flex items-center px-2 py-0.5 rounded text-xs ' +
-                          statusClass(job.status)
-                        }
-                      >
-                        {job.status}
-                      </span>
-                    </td>
-                    <td className="p-2">
-                      {new Date(job.created_at).toLocaleString()}
-                    </td>
-                    <td className="p-2 space-x-2">
-                      <button
-                        className="btn text-sm"
-                        onClick={() => handleRename(job)}
-                        disabled={isBusy}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        className="btn text-sm"
-                        onClick={() => handleRelaunch(job)}
-                        disabled={isBusy}
-                      >
-                        Relaunch
-                      </button>
-                      <button
-                        className="btn text-sm text-red-600"
-                        onClick={() => handleDelete(job)}
-                        disabled={isBusy}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* List */}
+      <div className="divide-y rounded-xl border bg-white/70 backdrop-blur">
+        {filtered.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            No results. Try a different search or upload a CSV on the Uploads page.
+          </div>
+        ) : (
+          filtered.map((job) => {
+            const isBusy = !!busyIds[job.id];
+            const name = fileNameFromPath(job.path);
+            return (
+              <Row
+                key={job.id}
+                job={job}
+                name={name}
+                isBusy={isBusy}
+                onRename={() => handleRename(job)}
+                onRelaunch={() => handleRelaunch(job)}
+                onDelete={() => handleDelete(job)}
+              />
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
 
-function fileNameFromPath(path: string) {
-  const parts = (path || '').split('/');
-  const fileWithTs = parts[parts.length - 1] || '';
-  // preserve everything after the first hyphen so renames keep the user-facing filename
-  return fileWithTs.includes('-')
-    ? fileWithTs.substring(fileWithTs.indexOf('-') + 1)
-    : fileWithTs;
-}
+function Row({
+  job,
+  name,
+  isBusy,
+  onRename,
+  onRelaunch,
+  onDelete,
+}: {
+  job: Job;
+  name: string;
+  isBusy: boolean;
+  onRename: () => void;
+  onRelaunch: () => void;
+  onDelete: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-function statusClass(status: string) {
-  const s = (status || '').toLowerCase();
-  if (s === 'done') return 'bg-green-100 text-green-800';
-  if (s === 'failed') return 'bg-red-100 text-red-800';
-  if (s === 'running') return 'bg-blue-100 text-blue-800';
-  if (s === 'queued' || s === 'pending') return 'bg-amber-100 text-amber-800';
-  return 'bg-gray-100 text-gray-800';
-}
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
+
+  return (
+    <div className="flex items-center justify-between p-3 sm:p-4" ref={containerRef}>
+      {/* Left: file + meta */}
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <StatusDot status={job.status} />
+          <p className="truncate font-medium">{name}</p>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className="inline-flex items-center rou
