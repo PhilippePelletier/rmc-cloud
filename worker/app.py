@@ -424,15 +424,15 @@ async def process(req: Request):
                  full_html  = f"<html>...</html>"
                  pdf_bytes  = HTML(string=full_html).write_pdf()
                  pdf_key    = f"{group_id}/brief_{brief_id}.pdf"
--                
--                # 2) If you also upload CSVs in Python anywhere, same pattern:
--                supabase.storage.from_("rmc-uploads").upload(
--                            csv_path,
--                            csv_bytes,
--                            {"contentType": "text/csv", "upsert": "true"},
--                        )
--                
--
+                
+                # 2) If you also upload CSVs in Python anywhere, same pattern:
+                supabase.storage.from_("rmc-uploads").upload(
+                            csv_path,
+                            csv_bytes,
+                            {"contentType": "text/csv", "upsert": "true"},
+                        )
+                
+
                  up_res = supabase.storage.from_("rmc-briefs").upload(
                              pdf_key,
                              pdf_bytes,
