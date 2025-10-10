@@ -439,7 +439,7 @@ async def process(req: Request):
                              pdf_bytes,
                              file_options={"contentType": "application/pdf", "upsert": "true"},
                          )
-
+            )
             if up_res.error:
                     raise RuntimeError(f"brief upload failed: {up_res.error.message}")
             
