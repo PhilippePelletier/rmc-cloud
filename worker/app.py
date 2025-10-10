@@ -419,27 +419,27 @@ async def process(req: Request):
                 brief_id = row[0]
 
             # 8) Render PDF + upload to Storage
-            # 8) Render PDF + upload to Storage
-             if WEASY_OK:
+                          if WEASY_OK:
                  brief_html = markdown.markdown(brief_md)
                  full_html  = f"<html>...</html>"
                  pdf_bytes  = HTML(string=full_html).write_pdf()
                  pdf_key    = f"{group_id}/brief_{brief_id}.pdf"
-                
-                # 2) If you also upload CSVs in Python anywhere, same pattern:
-                supabase.storage.from_("rmc-uploads").upload(
-                            csv_path,
-                            csv_bytes,
-                            {"contentType": "text/csv", "upsert": "true"},
-                        )
-                
-
+-                
+-                # 2) If you also upload CSVs in Python anywhere, same pattern:
+-                supabase.storage.from_("rmc-uploads").upload(
+-                            csv_path,
+-                            csv_bytes,
+-                            {"contentType": "text/csv", "upsert": "true"},
+-                        )
+-                
+-
+-                )
                  up_res = supabase.storage.from_("rmc-briefs").upload(
                              pdf_key,
                              pdf_bytes,
                              file_options={"contentType": "application/pdf", "upsert": "true"},
                          )
-            )
+
             if up_res.error:
                     raise RuntimeError(f"brief upload failed: {up_res.error.message}")
             
