@@ -205,6 +205,3 @@ function statusClass(status: string) {
   if (s === 'queued' || s === 'pending') return 'bg-amber-100 text-amber-800';
   return 'bg-gray-100 text-gray-800';
 }
-
-  );
-}
