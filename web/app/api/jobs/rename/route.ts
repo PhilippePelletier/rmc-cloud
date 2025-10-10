@@ -1,61 +1,85 @@
-// web/app/api/jobs/rename/route.ts
+// app/api/jobs/rename/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiContext } from '@/app/lib/api-ctx';
-import { getSupabaseAdminClient } from '@/app/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!; // server-only
+const UPLOADS_BUCKET = process.env.SUPABASE_UPLOADS_BUCKET || 'rmc-uploads';
+
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  throw new Error('Supabase env vars are not set');
+}
+
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
+
+type JobRow = {
+  id: string;
+  path: string;
+  display_name: string | null;
+  // include anything else you store if needed
+};
 
 export async function POST(req: NextRequest) {
-  const ctx = await getApiContext();
-  if ('error' in ctx) return ctx.error;
-  const { supabase, groupId } = ctx;
-  const body = await req.json().catch(() => ({}));
-  const id = String(body.id || '').trim();
-  const newName = String(body.newName || '').trim();
-  if (!id || !newName) {
-    return NextResponse.json({ error: 'Missing job id or new name' }, { status: 400 });
-  }
+  try {
+    const body = await req.json();
+    const id = String(body?.id || '').trim();
+    const newName = String(body?.newName || '').trim();
 
-  // Verify ownership and get current path
-  const { data: job, error: getErr } = await supabase
-    .from('jobs')
-    .select('id, group_id, kind, path')
-    .eq('id', id)
-    .single();
-  if (getErr) {
-    return NextResponse.json({ error: getErr.message }, { status: 400 });
-  }
-  if (!job || job.group_id !== groupId) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    if (!newName) return NextResponse.json({ error: 'Missing newName' }, { status: 400 });
+    if (newName.includes('/')) {
+      return NextResponse.json({ error: 'newName cannot contain "/"' }, { status: 400 });
+    }
 
-  // Compute new storage path
-  const safeKind = job.kind.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
-  const sanitized = newName.replace(/[^a-z0-9._-]/gi, '-');
-  const timestamp = Date.now();
-  const parts = job.path.split('/');
-  const folder = parts.slice(0, 2).join('/'); // e.g. "groupId/sales"
-  const newPath = `${folder}/${timestamp}-${sanitized}`;
+    // 1) Load the job
+    const { data: job, error: selErr } = await admin
+      .from('jobs')
+      .select('id, path, display_name')
+      .eq('id', id)
+      .single<JobRow>();
+    if (selErr || !job) throw new Error(selErr?.message || 'Job not found');
 
-  // Move file in Supabase storage (renaming it)
-  const admin = getSupabaseAdminClient();
-  const bucket = process.env.SUPABASE_UPLOADS_BUCKET || 'rmc-uploads';
-  const { error: moveErr } = await admin.storage
-    .from(bucket)
-    .move(job.path, newPath);
-  if (moveErr) {
-    return NextResponse.json({ error: `Failed to rename file: ${moveErr.message}` }, { status: 500 });
+    const oldPath = job.path || '';
+    if (!oldPath) throw new Error('Job has empty path');
+
+    // 2) Compute new path in same folder
+    const lastSlash = oldPath.lastIndexOf('/');
+    const folder = lastSlash >= 0 ? oldPath.slice(0, lastSlash) : '';
+    const oldFile = lastSlash >= 0 ? oldPath.slice(lastSlash + 1) : oldPath;
+
+    // Preserve timestamp prefix if it exists: "1234567890123-"
+    let prefix = '';
+    const dashIdx = oldFile.indexOf('-');
+    if (dashIdx > 0 && /^\d{10,}$/.test(oldFile.slice(0, dashIdx))) {
+      prefix = oldFile.slice(0, dashIdx + 1); // keep "digits-"
+    }
+
+    const newFile = `${prefix}${newName}`;
+    const newPath = folder ? `${folder}/${newFile}` : newFile;
+
+    if (newPath === oldPath) {
+      return NextResponse.json({ ok: true, path: newPath, displayName: newName });
+    }
+
+    // 3) Move in Storage
+    const { error: moveErr } = await admin.storage.from(UPLOADS_BUCKET).move(oldPath, newPath);
+    if (moveErr) throw new Error(`Storage move failed: ${moveErr.message}`);
+
+    // 4) Update DB (path + display_name)
+    const { error: updErr } = await admin
+      .from('jobs')
+      .update({ path: newPath, display_name: newName, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (updErr) {
+      // try to move back to reduce inconsistent state
+      await admin.storage.from(UPLOADS_BUCKET).move(newPath, oldPath);
+      throw new Error(`DB update failed: ${updErr.message}`);
+    }
+
+    return NextResponse.json({ ok: true, path: newPath, displayName: newName });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Rename failed' }, { status: 500 });
   }
-
-  // Update the job record with the new path
-  const { error: updateErr } = await admin
-    .from('jobs')
-    .update({ path: newPath, updated_at: new Date().toISOString() })
-    .eq('id', id);
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ status: 'renamed', job_id: id });
 }
