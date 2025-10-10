@@ -196,7 +196,6 @@ def compute_metrics(raw: pd.DataFrame, daily: pd.DataFrame) -> Dict[str, Any]:
                     "delta_pct": float(delta_pct),
                 })
 
-
     return {
         "revenue": revenue,
         "gm_dollar": gm_dollar,
@@ -281,10 +280,10 @@ async def process(req: Request):
     try:
         # 3) Download CSV from Storage
         # Define buckets (env override is fine; defaults match your project)
-        UPLOADS_BUCKET = os.getenv("SUPABASE_UPLOADS_BUCKET", "rmc-uploads")
-        BRIEFS_BUCKET  = os.getenv("SUPABASE_BRIEFS_BUCKET",  "rmc-briefs")
+        uploads_bucket_env = os.getenv("SUPABASE_UPLOADS_BUCKET", "rmc-uploads")
+        briefs_bucket_env  = os.getenv("SUPABASE_BRIEFS_BUCKET",  "rmc-briefs")
 
-        df = download_csv(UPLOADS_BUCKET, path)
+        df = download_csv(uploads_bucket_env, path)
         if df.empty:
             raise ValueError("CSV file has no rows")
 
@@ -418,36 +417,45 @@ async def process(req: Request):
                 ).first()
                 brief_id = row[0]
 
+            # Predefine for later references so names always exist
+            up_res = None
+            pdf_key = None
+
             # 8) Render PDF + upload to Storage
             if WEASY_OK:
-                 brief_html = markdown.markdown(brief_md)
-                 full_html  = f"<html>...</html>"
-                 pdf_bytes  = HTML(string=full_html).write_pdf()
-                 pdf_key    = f"{group_id}/brief_{brief_id}.pdf"
-                
+                brief_html = markdown.markdown(brief_md)
+                # NOTE: PDF_CSS defined above; integrate if desired
+                full_html = f"<html><head><style>{PDF_CSS}</style></head><body>{brief_html}</body></html>"
+                pdf_bytes = HTML(string=full_html).write_pdf()
+                pdf_key   = f"{group_id}/brief_{brief_id}.pdf"
+
                 # 2) If you also upload CSVs in Python anywhere, same pattern:
-                supabase.storage.from_("rmc-uploads").upload(
-                            csv_path,
-                            csv_bytes,
-                            {"contentType": "text/csv", "upsert": "true"},
-                        )
-                
+                # supabase.storage.from_(\"rmc-uploads\").upload(
+                #     csv_path,          # <-- not defined in this function scope
+                #     csv_bytes,         # <-- not defined in this function scope
+                #     {\"contentType\": \"text/csv\", \"upsert\": \"true\"},
+                # )
 
-                 up_res = supabase.storage.from_("rmc-briefs").upload(
-                             pdf_key,
-                             pdf_bytes,
-                             file_options={"contentType": "application/pdf", "upsert": "true"},
-                         )
+                up_res = supabase.storage.from_("rmc-briefs").upload(
+                    pdf_key,
+                    pdf_bytes,
+                    file_options={"contentType": "application/pdf", "upsert": "true"},
+                )
+            else:
+                logging.warning("Skipping PDF generation: WeasyPrint not available")
 
-            if up_res.error:
-                    raise RuntimeError(f"brief upload failed: {up_res.error.message}")
-            
-            with engine.begin() as conn:
-                    conn.execute(text("UPDATE briefs SET pdf_path = :p WHERE id = :id"),
-                                 {"p": pdf_key, "id": brief_id})
-        else:
-            logging.warning("Skipping PDF generation: WeasyPrint not available")
+            # Only check upload result if we actually attempted it
+            if up_res and getattr(up_res, "error", None):
+                # .error may be an object; guard attribute access
+                err = getattr(up_res.error, "message", up_res.error)
+                raise RuntimeError(f"brief upload failed: {err}")
 
+            if pdf_key:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("UPDATE briefs SET pdf_path = :p WHERE id = :id"),
+                        {"p": pdf_key, "id": brief_id},
+                    )
 
         # 9) Done
         supabase.table("jobs").update({"status": "done", "message": None}).eq("id", job_id).execute()
@@ -469,4 +477,3 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
