@@ -6,11 +6,12 @@ export default function Uploads() {
   // State for form inputs
   const [kind, setKind] = useState('sales');
   const [file, setFile] = useState<File | null>(null);
+  const [displayName, setDisplayName] = useState('');          // NEW: display name before upload
   const [headers, setHeaders] = useState<string[]>([]);        // CSV header columns
   const [mapping, setMapping] = useState<Record<string, string>>({});  // Required field -> CSV column mapping
   const [savedMappings, setSavedMappings] = useState<Array<{id: number, name: string, mapping: Record<string, string>}>>([]);
   const [selectedMappingId, setSelectedMappingId] = useState<string>('');  // for dropdown selection
-  const [mappingName, setMappingName] = useState('');         // name for saving new mapping
+  const [mappingName, setMappingName] = useState('');           // name for saving new mapping
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -36,6 +37,7 @@ export default function Uploads() {
     setKind(newKind);
     // Clear any existing file/mapping because the fields will differ
     setFile(null);
+    setDisplayName('');                 // NEW: reset display name when kind changes
     setHeaders([]);
     setMapping({});
     setSavedMappings([]);
@@ -53,13 +55,18 @@ export default function Uploads() {
     setSavedMappings([]);
     setSelectedMappingId('');
     setMappingName('');
+
+    // Pre-fill display name from file name (editable)
+    if (newFile?.name) setDisplayName(newFile.name);
+
     if (!newFile) return;
     // Read the first line of the CSV to get headers
     try {
       const text = await newFile.text();
-      const firstLine = text.split(/\r?\n/)[0];
-      const cols = firstLine.split(',').map(h => h.trim());
+      const firstLine = text.split(/\r?\n/)[0] || '';
+      const cols = firstLine.split(',').map(h => h.trim()).filter(Boolean);
       setHeaders(cols);
+
       // Auto-map CSV columns to required fields by name (case/format-insensitive)
       const reqFields = requiredFields[kind];
       const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, ''); 
@@ -70,9 +77,10 @@ export default function Uploads() {
         initialMapping[field] = match || "";  // use matched column or leave blank if not found
       }
       setMapping(initialMapping);
+
       // Fetch any saved mappings for this kind (to allow user to apply a saved mapping)
       try {
-        const res = await fetch(`/api/mappings?kind=${kind}`, { method: 'GET' });
+        const res = await fetch(`/api/mappings?kind=${encodeURIComponent(kind)}`, { method: 'GET' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load saved mappings');
         setSavedMappings(data.mappings || []);
@@ -106,7 +114,7 @@ export default function Uploads() {
   async function deleteMapping(id: string) {
     if (!id) return;
     try {
-      const res = await fetch(`/api/mappings?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/mappings?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete mapping');
       toast.success("Mapping removed");
@@ -146,8 +154,9 @@ export default function Uploads() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save mapping');
       toast.success("Mapping saved");
+
       // Refresh saved mappings list (to include the new or updated mapping)
-      const listRes = await fetch(`/api/mappings?kind=${kind}`);
+      const listRes = await fetch(`/api/mappings?kind=${encodeURIComponent(kind)}`);
       const listData = await listRes.json();
       if (listRes.ok) {
         setSavedMappings(listData.mappings || []);
@@ -178,18 +187,21 @@ export default function Uploads() {
     setBusy(true);
     setMsg('');
     try {
-      // Prepare form data with file, kind, and mapping JSON
+      // Prepare form data with file, kind, mapping JSON, and display name
       const fd = new FormData();
       fd.append('kind', kind);
       fd.append('file', file);
       fd.append('mapping', JSON.stringify(mapping));
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (displayName.trim()) fd.append('display_name', displayName.trim()); // NEW
+
+      // NOTE: uploads endpoint
+      const res = await fetch('/api/uploads', { method: 'POST', body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Upload failed');
       toast.success(`Queued job #${json.job_id}`);
       setMsg(JSON.stringify(json, null, 2));
-      // (Optional: Reset file and mapping after successful upload)
-      // setFile(null); setHeaders([]); ...
+      // (Optional: Reset after success)
+      // setFile(null); setHeaders([]); setMapping({}); setDisplayName('');
     } catch (e: any) {
       toast.error(e.message);
       setMsg(e.message);
@@ -206,8 +218,9 @@ export default function Uploads() {
     <main className="grid gap-4">
       <div className="card">
         <div className="h2 mb-2">Upload CSV</div>
-        {/* Input form for kind and file */}
-        <div className="grid gap-3 md:grid-cols-2">
+
+        {/* Input form for kind, file, and display name */}
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
             <div className="label">Kind</div>
             <select 
@@ -232,16 +245,77 @@ export default function Uploads() {
               disabled={busy}
             />
           </div>
+          <div>
+            <div className="label">Display name (optional)</div>
+            <input
+              className="input"
+              type="text"
+              placeholder="e.g. October sales.csv"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              disabled={busy}
+            />
+          </div>
         </div>
 
         {/* Mapping form: shown after a file is selected (headers extracted) */}
         {headers.length > 0 && (
           <div className="mt-4 border-t pt-3">
-            <div className="h3 mb-2">Map Fields</div>
+            {/* Header row with title (left) and Upload button (right) */}
+            <div className="mb-2 flex items-center justify-between">
+              <div className="h3">Map Fields</div>
+              <div className="flex items-center gap-3">
+                {!mappingComplete && (
+                  <span className="text-sm text-red-600">Complete mapping to enable upload</span>
+                )}
+                <button 
+                  className="btn" 
+                  onClick={send} 
+                  disabled={busy || !mappingComplete}
+                >
+                  {busy ? 'Uploading…' : 'Upload'}
+                </button>
+              </div>
+            </div>
+
             <p className="text-sm text-muted mb-3">
               Map your CSV columns to the expected fields. You can adjust any pre-filled values. 
               All listed fields are required for the <strong>{kind}</strong> CSV.
             </p>
+
+            {/* Preset/Saved mappings selector — moved to TOP of mapping section */}
+            {savedMappings.length > 0 && (
+              <div className="mb-4">
+                <div className="label">Preset</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select 
+                    className="input w-auto" 
+                    value={selectedMappingId} 
+                    onChange={e => applySavedMapping(e.target.value)} 
+                    disabled={busy}
+                  >
+                    <option value="">-- Choose a saved mapping --</option>
+                    {savedMappings.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedMappingId && (
+                    <button 
+                      type="button" 
+                      className="btn text-sm" 
+                      onClick={() => deleteMapping(selectedMappingId)} 
+                      disabled={busy}
+                      title="Delete this saved preset"
+                    >
+                      Delete preset
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Field mapping dropdowns */}
             {requiredFields[kind].map(field => (
               <div key={field} className="mb-2">
@@ -268,6 +342,7 @@ export default function Uploads() {
                 </select>
               </div>
             ))}
+
             {/* Warning if not all fields are mapped */}
             {!mappingComplete && (
               <div className="text-red-600 text-sm mb-2">
@@ -275,40 +350,10 @@ export default function Uploads() {
               </div>
             )}
 
-            {/* Saved mappings section */}
-            {savedMappings.length > 0 && (
-              <div className="mb-3">
-                <div className="label">Saved Mappings</div>
-                <div className="flex items-center gap-2">
-                  <select 
-                    className="input w-auto" 
-                    value={selectedMappingId} 
-                    onChange={e => applySavedMapping(e.target.value)} 
-                    disabled={busy}
-                  >
-                    <option value="">-- Choose a saved mapping --</option>
-                    {savedMappings.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedMappingId && (
-                    <button 
-                      type="button" 
-                      className="btn text-sm" 
-                      onClick={() => deleteMapping(selectedMappingId)} 
-                      disabled={busy}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Save current mapping */}
-            <div className="mt-2 mb-4">
-              <div className="flex items-center gap-2">
+            {/* Save current mapping (kept at the bottom) */}
+            <div className="mt-3 mb-1">
+              <div className="label">Save current mapping</div>
+              <div className="flex flex-wrap items-center gap-2">
                 <input 
                   type="text" 
                   className="input w-auto" 
@@ -326,16 +371,6 @@ export default function Uploads() {
                   Save Mapping
                 </button>
               </div>
-            </div>
-            {/* Upload button (enabled when mapping complete) */}
-            <div className="flex justify-end">
-              <button 
-                className="btn" 
-                onClick={send} 
-                disabled={busy || !mappingComplete}
-              >
-                {busy ? 'Uploading…' : 'Upload'}
-              </button>
             </div>
           </div>
         )}
@@ -357,4 +392,3 @@ export default function Uploads() {
     </main>
   );
 }
-
