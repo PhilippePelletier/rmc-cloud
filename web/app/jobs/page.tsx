@@ -10,6 +10,8 @@ type Job = {
   status: string;
   created_at: string;
   updated_at?: string | null;
+  // If your API starts returning this, we'll prefer it:
+  display_name?: string | null;
 };
 
 const STATUSES = ['all', 'queued', 'running', 'done', 'failed'] as const;
@@ -47,18 +49,19 @@ export default function JobsPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return jobs.filter((j) => {
-      const name = fileNameFromPath(j.path).toLowerCase();
+      const name = displayName(j).toLowerCase();
       const matchesQuery =
-        !q || name.includes(q) || j.kind.toLowerCase().includes(q) || j.id.toLowerCase().includes(q);
+        !q || name.includes(q) || j.kind.toLowerCase().includes(q);
       const matchesStatus = status === 'all' || j.status.toLowerCase() === status;
       return matchesQuery && matchesStatus;
     });
   }, [jobs, query, status]);
 
   async function handleRename(job: Job) {
-    const current = fileNameFromPath(job.path);
+    const current = displayName(job);
     const newName = window.prompt('Enter new file name (with extension):', current);
     if (!newName || newName === current) return;
+
     try {
       setBusy(job.id, true);
       const res = await fetch('/api/jobs/rename', {
@@ -68,7 +71,23 @@ export default function JobsPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Rename failed');
+
+      // Optimistic/local update (works if your API returns either path or displayName)
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id
+            ? {
+                ...j,
+                path: typeof json.path === 'string' ? json.path : j.path,
+                display_name:
+                  typeof json.displayName === 'string' ? json.displayName : newName,
+              }
+            : j
+        )
+      );
+
       toast.success('File renamed');
+      // Still refresh from server to be 100% consistent with backend
       fetchJobs();
     } catch (err: any) {
       toast.error(err.message || 'Error renaming file');
@@ -91,8 +110,9 @@ export default function JobsPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Deletion failed');
-      toast.success('Job deleted');
-      fetchJobs();
+
+      toast.success('Deleted');
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
     } catch (err: any) {
       toast.error(err.message || 'Error deleting job');
     } finally {
@@ -132,7 +152,7 @@ export default function JobsPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search files, kind, or ID…"
+              placeholder="Search files or type…"
               className="w-full rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 sm:w-72"
             />
             <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">
@@ -165,7 +185,7 @@ export default function JobsPage() {
         ) : (
           filtered.map((job) => {
             const isBusy = !!busyIds[job.id];
-            const name = fileNameFromPath(job.path);
+            const name = displayName(job);
             return (
               <Row
                 key={job.id}
@@ -200,6 +220,7 @@ function Row({
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -210,14 +231,12 @@ function Row({
       }
     };
     document.addEventListener('click', onDocClick);
-    return () => {
-      document.removeEventListener('click', onDocClick);
-    };
+    return () => document.removeEventListener('click', onDocClick);
   }, []);
 
   return (
     <div className="flex items-center justify-between p-3 sm:p-4" ref={containerRef}>
-      {/* Left: file + meta */}
+      {/* Left: status dot + name (ID hidden) */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <StatusDot status={job.status} />
@@ -225,8 +244,6 @@ function Row({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
           <span className="inline-flex items-center rounded-full border px-2 py-0.5">{job.kind}</span>
-          <span>•</span>
-          <span>ID: {job.id}</span>
           <span>•</span>
           <span>Uploaded {timeAgo(job.created_at)}</span>
           {job.updated_at ? (
@@ -253,9 +270,13 @@ function Row({
             ⋮
           </button>
           {menuOpen && (
-            <div className="absolute right-0 z-20 mt-2 w-40 overflow-hidden rounded-lg border bg-white shadow-lg">
+            <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-lg border bg-white shadow-lg">
               <MenuItem onClick={() => { setMenuOpen(false); onRename(); }}>Rename</MenuItem>
               <MenuItem onClick={() => { setMenuOpen(false); onRelaunch(); }}>Relaunch</MenuItem>
+              <div className="my-1 h-px bg-gray-100" />
+              <MenuItem onClick={() => { setMenuOpen(false); setShowDetails(true); }}>
+                Advanced…
+              </MenuItem>
               <MenuItem destructive onClick={() => { setMenuOpen(false); onDelete(); }}>
                 Delete
               </MenuItem>
@@ -263,7 +284,86 @@ function Row({
           )}
         </div>
       </div>
+
+      {/* Details modal (Advanced) */}
+      {showDetails && (
+        <DetailsModal
+          onClose={() => setShowDetails(false)}
+          job={job}
+          displayName={name}
+        />
+      )}
     </div>
+  );
+}
+
+function DetailsModal({
+  onClose,
+  job,
+  displayName,
+}: {
+  onClose: () => void;
+  job: Job;
+  displayName: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative z-50 w-full max-w-md rounded-2xl border bg-white p-5 shadow-xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">File details</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border px-2 py-1 text-sm hover:bg-gray-50"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <RowKV label="Name">
+            <span className="font-medium">{displayName}</span>
+          </RowKV>
+          <RowKV label="Type">{job.kind}</RowKV>
+          <RowKV label="Status"><StatusPill status={job.status} /></RowKV>
+          <RowKV label="Created">{new Date(job.created_at).toLocaleString()}</RowKV>
+          {job.updated_at && <RowKV label="Updated">{new Date(job.updated_at).toLocaleString()}</RowKV>}
+          <RowKV label="Path">
+            <code className="break-all">{job.path}</code>
+            <CopyBtn value={job.path} className="ml-2" />
+          </RowKV>
+          <RowKV label="ID">
+            <code className="break-all">{job.id}</code>
+            <CopyBtn value={job.id} className="ml-2" />
+          </RowKV>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RowKV({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="w-24 shrink-0 text-gray-500">{label}</div>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function CopyBtn({ value, className = '' }: { value: string; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard.writeText(value);
+        toast.success('Copied');
+      }}
+      className={`rounded-md border px-2 py-1 text-xs hover:bg-gray-50 ${className}`}
+    >
+      Copy
+    </button>
   );
 }
 
@@ -320,9 +420,15 @@ function StatusPill({ status }: { status: string }) {
   return <span className={cls}>{status}</span>;
 }
 
+function displayName(job: Job) {
+  if (job.display_name && job.display_name.trim()) return job.display_name.trim();
+  return fileNameFromPath(job.path);
+}
+
 function fileNameFromPath(path: string) {
   const parts = (path || '').split('/');
   const fileWithTs = parts[parts.length - 1] || '';
+  // if backend prefixes "{timestamp}-{name}"
   return fileWithTs.includes('-')
     ? fileWithTs.substring(fileWithTs.indexOf('-') + 1)
     : fileWithTs;
