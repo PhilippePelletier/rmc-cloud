@@ -419,7 +419,7 @@ async def process(req: Request):
                 brief_id = row[0]
 
             # 8) Render PDF + upload to Storage
-                          if WEASY_OK:
+            if WEASY_OK:
                  brief_html = markdown.markdown(brief_md)
                  full_html  = f"<html>...</html>"
                  pdf_bytes  = HTML(string=full_html).write_pdf()
@@ -433,7 +433,7 @@ async def process(req: Request):
 -                        )
 -                
 -
--                )
+            )
                  up_res = supabase.storage.from_("rmc-briefs").upload(
                              pdf_key,
                              pdf_bytes,
