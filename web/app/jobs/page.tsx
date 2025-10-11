@@ -60,7 +60,14 @@ export default function JobsPage() {
       const res = await fetch('/api/jobs');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to load jobs');
-      setJobs((json.jobs || []) as Job[]);
+
+      // *** CHANGED: normalize `job_group_id` (or `folder_id`) from API to our local `folder_id`
+      const list = (json.jobs || []) as any[];
+      const normalized: Job[] = list.map((j) => ({
+        ...j,
+        folder_id: j.folder_id ?? j.job_group_id ?? null,
+      }));
+      setJobs(normalized);
     } catch (e: any) {
       setError(e.message || 'Unknown error');
     } finally {
@@ -70,10 +77,13 @@ export default function JobsPage() {
 
   async function fetchFolders() {
     try {
-      const res = await fetch(`/api/folders/list?group_id=${encodeURIComponent(groupId)}`);
+      // *** CHANGED: point to /api/jobs/groups (server derives tenant group)
+      const res = await fetch(`/api/jobs/groups`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to load folders');
-      setFolders((json.folders || []) as FolderRow[]);
+
+      // *** CHANGED: response key is `groups`
+      setFolders((json.groups || []) as FolderRow[]);
     } catch (e: any) {
       // Non-fatal to the jobs page
       console.warn(e?.message || e);
@@ -186,7 +196,7 @@ export default function JobsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: job.id }),
       });
-    const json = await res.json();
+      const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Relaunch failed');
       toast.success('Job relaunched');
       fetchJobs();
@@ -203,14 +213,16 @@ export default function JobsPage() {
   async function createFolder() {
     if (!newFolderName.trim()) return;
     try {
-      const res = await fetch('/api/folders/create', {
+      // *** CHANGED: no group_id in body; server derives it
+      const res = await fetch('/api/jobs/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newFolderName.trim(), group_id: groupId }),
+        body: JSON.stringify({ name: newFolderName.trim() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create folder');
-      setFolders((prev) => [...prev, json.folder]);
+      // *** CHANGED: response key is `group`
+      setFolders((prev) => [...prev, json.group]);
       setCreatingFolder(false);
       setNewFolderName('');
       toast.success('Folder created');
@@ -233,10 +245,11 @@ export default function JobsPage() {
     const jobId = e.dataTransfer.getData('text/plain');
     if (!jobId) return;
     try {
-      const res = await fetch('/api/jobs/move', {
+      // *** CHANGED: endpoint and body keys
+      const res = await fetch('/api/jobs/groups/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: jobId, folder_id: folderId }),
+        body: JSON.stringify({ job_id: jobId, group_id: folderId }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Move failed');
@@ -314,8 +327,8 @@ export default function JobsPage() {
                 <li key={b.id}>
                   <button
                     onClick={() => setActiveFolder(b.id as any)}
-                    onDragOver={allowDrop}
-                    onDrop={(e) => onDropToFolder(e, b.id === 'UNFILED' ? null : null)}
+                    onDragOver={b.id === 'UNFILED' ? allowDrop : undefined}
+                    onDrop={b.id === 'UNFILED' ? (e) => onDropToFolder(e, null) : undefined}
                     className={`w-full text-left rounded-md px-2 py-1 text-sm hover:bg-gray-50 ${
                       activeFolder === b.id ? 'bg-gray-100' : ''
                     }`}
