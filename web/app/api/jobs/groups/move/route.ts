@@ -1,61 +1,54 @@
-// web/app/api/jobs/groups/move/route.ts
+// app/api/jobs/move/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getApiContext } from "@/app/lib/api-ctx";
 import { getSupabaseAdminClient } from "@/app/lib/supabase";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
-/**
- * Move a job into a group, or ungroup it.
- * POST /api/jobs/groups/move
- * Body: { job_id: string, group_id?: string | null }
- *  - group_id = target folder id; pass null to remove from any folder
- */
 export async function POST(req: NextRequest) {
   try {
+    // auth / context
     const ctx = await getApiContext();
     if ("error" in ctx) return ctx.error;
     const { groupId } = ctx;
 
-    const body = await req.json().catch(() => null);
-    const job_id = String(body?.job_id || "").trim();
-    const dest_group_id = body?.group_id ? String(body.group_id) : null;
-
+    // payload
+    const { job_id, folder_id } = await req.json();
     if (!job_id) {
       return NextResponse.json({ error: "Missing job_id" }, { status: 400 });
     }
+    // folder_id can be null (drop into “Unfiled”)
 
     const admin = getSupabaseAdminClient();
 
-    // Optional safety: ensure the destination folder (if provided) belongs to this tenant
-    if (dest_group_id) {
-      const { data: folder, error: folderErr } = await admin
-        .from("job_groups")
-        .select("id,group_id")
-        .eq("id", dest_group_id)
+    // (Optional) If you want to enforce the folder belongs to this group:
+    if (folder_id) {
+      const { data: folder, error: fErr } = await admin
+        .from("job_folders")
+        .select("id, group_id")
+        .eq("id", folder_id)
         .single();
-      if (folderErr || !folder) {
-        return NextResponse.json({ error: "Destination folder not found" }, { status: 404 });
+      if (fErr || !folder) {
+        return NextResponse.json({ error: "Folder not found" }, { status: 404 });
       }
       if (folder.group_id !== groupId) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "Folder not in your group" }, { status: 403 });
       }
     }
 
-    // Update the job row: set job_group_id (nullable)
+    // Update the job -> set folder_id (NOT job_group_id)
     const { data, error } = await admin
       .from("jobs")
-      .update({ job_group_id: dest_group_id })
+      .update({ folder_id: folder_id ?? null })
       .eq("id", job_id)
-      .eq("group_id", groupId) // tenant safety
-      .select("id,job_group_id")
+      .select("id, folder_id")
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ ok: true, job: data });
+
+    return NextResponse.json({ ok: true, job_id: data.id, folder_id: data.folder_id });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
