@@ -195,7 +195,7 @@ export default function Uploads() {
       if (displayName.trim()) fd.append('display_name', displayName.trim()); // NEW
 
       // NOTE: uploads endpoint
-      const res = await fetch('/api/uploads', { method: 'POST', body: fd });
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Upload failed');
       toast.success(`Queued job #${json.job_id}`);
