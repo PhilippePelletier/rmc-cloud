@@ -1,50 +1,60 @@
-// middleware.ts
-import { NextResponse, type NextRequest } from 'next/server';
+// web/middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+
+const PROTECTED_PREFIXES = ['/dashboard', '/uploads', '/jobs', '/brief'];
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
+  // Server-side Supabase client wired to Next cookies
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => req.cookies.get(name)?.value,
-        set: (name, value, options) => {
-          res.cookies.set({ name, value, ...options });
+        get(name: string) {
+          return req.cookies.get(name)?.value;
         },
-        remove: (name, options) => {
-          res.cookies.set({ name, value: '', ...options, maxAge: 0 });
+        // keep cookies updated on the response
+        set(name: string, value: string, options: Parameters<NextResponse['cookies']['set']>[2]) {
+          res.cookies.set(name, value, options);
+        },
+        remove(name: string, options: Parameters<NextResponse['cookies']['set']>[2]) {
+          res.cookies.set(name, '', { ...options, maxAge: 0 });
         },
       },
     }
   );
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getUser();
+  const user = data?.user ?? null;
 
-  const publicPaths = new Set<string>([
-    '/',
-    '/sign-in',
-    '/sign-up',
-    '/api/auth/set',      // <— allow cookie sync route
-    '/auth/callback'      // (if you add an OAuth callback page later)
-  ]);
+  const url = req.nextUrl;
+  const path = url.pathname;
 
-  const { pathname } = req.nextUrl;
+  const isAuthPage =
+    path === '/sign-in' || path === '/sign-up' || path === '/signin' || path === '/signup';
 
-  if (!publicPaths.has(pathname) && !session) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/sign-in';
-    url.searchParams.set('redirectedFrom', pathname);
-    return NextResponse.redirect(url);
+  // 1) Block protected pages when logged out
+  if (!user && PROTECTED_PREFIXES.some((p) => path.startsWith(p))) {
+    const redirectUrl = new URL('/sign-in', req.url);
+    redirectUrl.searchParams.set('redirectedFrom', path);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // 2) Bounce authenticated users away from auth pages
+  if (user && isAuthPage) {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
   return res;
 }
 
+// Exclude static assets and your auth cookie sync endpoint from middleware
 export const config = {
-  matcher: ['/((?!_next|.*\\..*).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|api/auth/set).*)',
+  ],
 };
