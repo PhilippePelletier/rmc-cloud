@@ -38,87 +38,110 @@ function SignInInner() {
 
   async function handlePasswordSignIn(e: React.FormEvent) {
     e.preventDefault();
-    if (loadingPw || loadingGoogle || loadingLinkedIn || loadingMagic) return;
     setErrorMsg('');
-    setLoadingPw(true);
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoadingPw(false);
-
+    setLoading(true);
+  
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  
+    setLoading(false);
+  
     if (error) {
       setErrorMsg(`${error.code ?? 'auth_error'}: ${error.message}`);
       return;
     }
-
+  
     // Get current session from the browser client
     const { data: sess } = await supabase.auth.getSession();
     const at = sess?.session?.access_token;
     const rt = sess?.session?.refresh_token;
-
+  
     if (!at || !rt) {
       setErrorMsg('No session returned. Check email confirmation settings in Supabase Auth.');
       return;
     }
-
-    // Sync to server cookies
+  
+    // Sync to server cookies (IMPORTANT: include credentials and no-store)
     const r = await fetch('/api/auth/set', {
       method: 'POST',
+      credentials: 'include',         // <— ensure Set-Cookie is honored
+      cache: 'no-store',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ access_token: at, refresh_token: rt }),
     });
-
+  
     if (!r.ok) {
-      let body: any = {};
-      try { body = await r.json(); } catch {}
+      const body = await r.json().catch(() => ({}));
       setErrorMsg(`cookie_sync_error: ${body?.error ?? r.statusText}`);
       return;
     }
-
-    router.push(redirectedFrom);
+  
+    // FORCE a real navigation so middleware + server components see the cookies immediately
+    const target = redirectedFrom || '/dashboard';
+    if (typeof window !== 'undefined') {
+      window.location.assign(target);  // hard reload (most reliable)
+    } else {
+      router.replace(target);
+      router.refresh();
+    }
   }
 
-  async function handleOAuth(provider: 'google' | 'linkedin_oidc') {
-    if (loadingPw || loadingGoogle || loadingLinkedIn || loadingMagic) return;
-    setErrorMsg('');
-    provider === 'google' ? setLoadingGoogle(true) : setLoadingLinkedIn(true);
 
-    // Keep the return target round-trip by appending ?redirectedFrom=...
-    const redirectTo = `${window.location.origin}/dashboard?redirectedFrom=${encodeURIComponent(
-      redirectedFrom
-    )}`;
+async function handleOAuth(provider: 'google' | 'linkedin_oidc') {
+  if (loadingPw || loadingGoogle || loadingLinkedIn || loadingMagic) return;
+  setErrorMsg('');
+
+  // set loading per provider
+  if (provider === 'google') setLoadingGoogle(true);
+  else setLoadingLinkedIn(true);
+
+  try {
+    // Where to go AFTER callback finishes syncing cookies
+    const next = redirectedFrom || '/dashboard';
+
+    // Send the user to our auth callback page; it will then push them to `next`
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo },
-    });
-
-    provider === 'google' ? setLoadingGoogle(false) : setLoadingLinkedIn(false);
-    if (error) setErrorMsg(`${error.code ?? 'oauth_error'}: ${error.message}`);
-  }
-
-  async function handleMagicLink() {
-    if (loadingPw || loadingGoogle || loadingLinkedIn || loadingMagic) return;
-    setErrorMsg('');
-    if (!email) {
-      setErrorMsg('otp_error: enter your email to receive a magic link.');
-      return;
-    }
-    setLoadingMagic(true);
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
       options: {
-        // round-trip the intended destination too
-        emailRedirectTo: `${window.location.origin}/dashboard?redirectedFrom=${encodeURIComponent(
-          redirectedFrom
-        )}`,
+        redirectTo,
+        // Optional but recommended:
+        // queryParams: { prompt: 'consent' }, // Google example
+        // skipBrowserRedirect: false, // default; ensures we actually navigate
       },
     });
 
-    setLoadingMagic(false);
-    if (error) setErrorMsg(`${error.code ?? 'otp_error'}: ${error.message}`);
-    else alert('Check your email for the magic link.');
+    if (error) setErrorMsg(`${error.code ?? 'oauth_error'}: ${error.message}`);
+    // DO NOT manually navigate here — the browser is already leaving this page.
+  } finally {
+    if (provider === 'google') setLoadingGoogle(false);
+    else setLoadingLinkedIn(false);
   }
+}
+
+async function handleMagicLink() {
+  if (loadingPw || loadingGoogle || loadingLinkedIn || loadingMagic) return;
+  setErrorMsg('');
+  if (!email) {
+    setErrorMsg('otp_error: enter your email to receive a magic link.');
+  return;
+  }
+  setLoadingMagic(true);
+
+  const next = redirectedFrom || '/dashboard';
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      // Send them to our callback page, which will sync cookies then forward to `next`
+      emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+    },
+  });
+
+  setLoadingMagic(false);
+  if (error) setErrorMsg(`${error.code ?? 'otp_error'}: ${error.message}`);
+  else alert('Check your email for the magic link.');
+}
 
   const anyLoading = loadingPw || loadingGoogle || loadingLinkedIn || loadingMagic;
 
