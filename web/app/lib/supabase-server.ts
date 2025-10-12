@@ -10,22 +10,21 @@ const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // Optional: log once on boot to help diagnose env issues
   console.warn(
     '[supabase-server] Missing SUPABASE env. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
   );
 }
 
-export function getSupabaseServerClient() {
+// Marked async to satisfy Server Action constraint in a "use server" module
+export async function getSupabaseServerClient() {
   const store = cookies();
 
-  return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const client = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
       get(name: string) {
         return store.get(name)?.value;
       },
       set(name: string, value: string, options?: CookieOptions) {
-        // Next.js App Router cookies() API uses set() for both set & remove
         store.set({
           name,
           value,
@@ -41,16 +40,18 @@ export function getSupabaseServerClient() {
         });
       },
     },
-    // NOTE: Do not pass `headers` here — your installed @supabase/ssr types
-    // only support { cookies }.
+    // Do NOT pass `headers` here with your current @supabase/ssr version.
   });
+
+  return client;
 }
 
 export async function getServerSession() {
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
   return {
     user: data?.user ?? null,
     error: error?.message ?? null,
   };
 }
+
