@@ -71,7 +71,7 @@ function SignInInner() {
     }
 
     // Now the middleware will see an authenticated session
-    router.push(redirectedFrom);
+    window.location.assign(redirectedFrom);
   }
 
   async function handleOAuth(provider: 'google' | 'linkedin_oidc') {
