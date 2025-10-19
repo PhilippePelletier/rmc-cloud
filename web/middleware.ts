@@ -28,7 +28,7 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  const { data, error } = await supabase.auth.getUser();
+  const { data } = await supabase.auth.getUser();
   const user = data?.user ?? null;
 
   const url = req.nextUrl;
@@ -36,6 +36,23 @@ export async function middleware(req: NextRequest) {
 
   const isAuthPage =
     path === '/sign-in' || path === '/sign-up' || path === '/signin' || path === '/signup';
+
+  /* ----------------------------------------------------------
+   * NEW: Friendly landing page routing
+   * - Anonymous on "/" -> rewrite to "/welcome"
+   * - Signed-in on "/welcome" -> redirect to "/dashboard"
+   * ---------------------------------------------------------- */
+  if (!user && (path === '/' || path === '')) {
+    const rewriteUrl = url.clone();
+    rewriteUrl.pathname = '/welcome';
+    return NextResponse.rewrite(rewriteUrl);
+  }
+
+  if (user && path === '/welcome') {
+    const redirectUrl = url.clone();
+    redirectUrl.pathname = '/dashboard';
+    return NextResponse.redirect(redirectUrl);
+  }
 
   // 1) Block protected pages when logged out
   if (!user && PROTECTED_PREFIXES.some((p) => path.startsWith(p))) {
