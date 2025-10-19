@@ -38,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   </>
                 )}
               </div>
-            </header>
+            <HeaderShell />
             <ToasterClient />
             {children}
           </div>
