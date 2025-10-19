@@ -4,6 +4,7 @@ import ToasterClient from '@/components/ToasterClient';
 import NavMenu from '@/components/NavMenu';
 import SupabaseProvider from '@/components/SupabaseProvider';
 import Link from 'next/link';
+import HeaderShell from '@/components/HeaderShell';
 
 // NEW: server-side session helper + client user menu
 import { getServerSession } from '@/app/lib/supabase-server';
