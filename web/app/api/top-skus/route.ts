@@ -23,12 +23,14 @@ export async function GET(req: Request) {
     const to   = url.searchParams.get("to");
     const top  = Math.max(1, Math.min(50, Number(url.searchParams.get("top") ?? 10)));
     const store = url.searchParams.get("store");
+    const category = url.searchParams.get("category");
     const sku   = url.searchParams.get("sku");
 
     let q = supabase.from("sales")
       .select("sku, net_sales, gm_dollar, cost, units, date")
       .eq("group_id", groupId);
     if (store) q = q.eq("store_id", store);
+    if (category) q = q.eq("category", category);
     if (sku)   q = q.eq("sku", sku);
     if (from)  q = q.gte("date", from);
     if (to)    q = q.lte("date", to);
