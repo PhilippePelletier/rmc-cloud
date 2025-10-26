@@ -1,5 +1,5 @@
 // app/api/top-skus/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getApiContext } from "@/app/lib/api-ctx";
 
 export const dynamic = "force-dynamic";
