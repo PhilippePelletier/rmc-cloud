@@ -4,7 +4,12 @@ import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
-type Kpis = { /* same as before... */ };
+interface Kpis {
+  revenue: number;
+  gm_dollar: number;
+  gm_pct: number;
+  units: number;
+};
 type Cat = { /* ... */ };
 
 export default function Dashboard() {
