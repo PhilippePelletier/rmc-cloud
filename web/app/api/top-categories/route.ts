@@ -75,7 +75,7 @@ export async function GET(req: Request) {
       .select("category, net_sales, gm_dollar, units")
       .eq("group_id", groupId);
     if (store) q = q.eq("store_id", store);
-    if (category) qs = qs.eq("category", category);
+    if (category) q = q.eq("category", category);
     if (from)  q = q.gte("date", from);
     if (to)    q = q.lte("date", to);
 
