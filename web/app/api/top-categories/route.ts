@@ -22,6 +22,7 @@ export async function GET(req: Request) {
     const to   = url.searchParams.get("to");
     const top  = Math.max(1, Math.min(50, Number(url.searchParams.get("top") ?? 8)));
     const store = url.searchParams.get("store");
+    const category = url.searchParams.get("category");
     const sku   = url.searchParams.get("sku");
 
     // If a specific SKU is selected, compute its category totals from sales data
@@ -31,6 +32,7 @@ export async function GET(req: Request) {
         .eq("group_id", groupId)
         .eq("sku", sku);
       if (store) qs = qs.eq("store_id", store);
+      if (category) qs = qs.eq("category", category);
       if (from)  qs = qs.gte("date", from);
       if (to)    qs = qs.lte("date", to);
 
@@ -73,6 +75,7 @@ export async function GET(req: Request) {
       .select("category, net_sales, gm_dollar, units")
       .eq("group_id", groupId);
     if (store) q = q.eq("store_id", store);
+    if (category) qs = qs.eq("category", category);
     if (from)  q = q.gte("date", from);
     if (to)    q = q.lte("date", to);
 
