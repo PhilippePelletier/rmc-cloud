@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     let from = url.searchParams.get("from"); // YYYY-MM-DD
     let to   = url.searchParams.get("to");   // YYYY-MM-DD
     const store = url.searchParams.get("store");      // store ID filter (optional)
+    const category = url.searchParams.get("category");
     const sku   = url.searchParams.get("sku");        // SKU filter (optional)
 
     // If date range not provided, default to last 90 days (same as existing logic)
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
         .eq("group_id", groupId)
         .eq("sku", sku);
       if (store) qs = qs.eq("store_id", store);
+      if (category) qs = qs.eq("category", category);
       if (from)  qs = qs.gte("date", from);
       if (to)    qs = qs.lte("date", to);
 
@@ -100,6 +102,7 @@ export async function GET(req: NextRequest) {
       .select("date, net_sales, gm_dollar, units")
       .eq("group_id", groupId);
     if (store) q = q.eq("store_id", store);           // filter by store if provided
+    if (category) q = q.eq("category", category);
     if (from)  q = q.gte("date", from);
     if (to)    q = q.lte("date", to);
 
