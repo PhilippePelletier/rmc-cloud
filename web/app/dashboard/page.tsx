@@ -9,8 +9,8 @@ interface Kpis {
   gm_dollar: number;
   gm_pct: number;
   units: number;
-  trend: { date: string; revenue: number }[];   // add trend timeseries
-  series: { date: string; revenue: number }[];  // legacy alias for trend
+  trend: { date: string; revenue: number }[];   // trend timeseries
+  series: { date: string; revenue: number }[];  // alias for trend
   disc_pct?: number;  // optional: discount% if ever used
 };
 type Cat = {
@@ -21,13 +21,14 @@ type Cat = {
   units: number;
 };
 
-
 export default function Dashboard() {
-  // New state for filters:
-  const [range, setRange] = useState<'7' | '30' | '90' | 'ytd'>('90');  // default Last 90 days
-  const [selectedStore, setSelectedStore] = useState<string>('');      // store filter (empty = all)
-  const [selectedSku, setSelectedSku] = useState<string>('');          // SKU filter (empty = all)
-  
+  // States for filters:
+  const [range, setRange] = useState<'7' | '30' | '90' | 'ytd'>('90');        // timeframe filter (default 90 days)
+  const [selectedStore, setSelectedStore] = useState<string>('');            // store filter (empty = all)
+  const [selectedCategory, setSelectedCategory] = useState<string>('');      // NEW: category filter (empty = all)
+  const [selectedSku, setSelectedSku] = useState<string>('');                // SKU filter (empty = all)
+  const [storeFilter, setStoreFilter] = useState<string>('');                // NEW: search term for store filter
+
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [cats, setCats] = useState<Cat[]>([]);
   const [marginSteps, setMarginSteps] = useState<Array<{ name: string; value: number }>>([]);
@@ -35,7 +36,7 @@ export default function Dashboard() {
   const [anomalies, setAnomalies] = useState<Array<{ date: string; category: string; revenue: number; delta_pct: number }>>([]);
   const [err, setErr] = useState('');
 
-  // Fetch list of stores for dropdown (calls new /api/stores endpoint):
+  // Fetch list of stores for dropdown:
   const [storeList, setStoreList] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
     (async () => {
@@ -49,7 +50,22 @@ export default function Dashboard() {
       }
     })();
   }, []);
-  
+
+  // NEW: Fetch list of categories for dropdown:
+  const [categoryList, setCategoryList] = useState<string[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/categories');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load categories');
+        setCategoryList(data.categories || []);
+      } catch (e: any) {
+        console.error('Error loading category list:', e.message);
+      }
+    })();
+  }, []);
+
   // Helper to compute from/to dates based on selected range
   function getDateRange() {
     const end = dayjs();  // today
@@ -66,6 +82,7 @@ export default function Dashboard() {
     };
   }
 
+  // Fetch all dashboard data whenever filters or range change
   useEffect(() => {
     (async () => {
       try {
@@ -74,8 +91,9 @@ export default function Dashboard() {
         const params = new URLSearchParams();
         params.append('from', from);
         params.append('to', to);
-        if (selectedStore) params.append('store', selectedStore);
-        if (selectedSku) params.append('sku', selectedSku);
+        if (selectedStore)    params.append('store', selectedStore);
+        if (selectedCategory) params.append('category', selectedCategory);   // NEW: include category filter
+        if (selectedSku)      params.append('sku', selectedSku);
         const query = params.toString() ? `?${params.toString()}` : '';
 
         const [kpiResp, catResp, mwResp, skusResp, anomaliesResp] = await Promise.all([
@@ -90,11 +108,11 @@ export default function Dashboard() {
         const mwData = await mwResp.json();
         const skusData = await skusResp.json();
         const anomaliesData = await anomaliesResp.json();
-        if (!kpiResp.ok)    throw new Error(kpiData.error    || 'Failed to load KPIs');
-        if (!catResp.ok)    throw new Error(catData.error    || 'Failed to load categories');
-        if (!mwResp.ok)     throw new Error(mwData.error     || 'Failed to load margin waterfall');
-        if (!skusResp.ok)   throw new Error(skusData.error   || 'Failed to load top SKUs');
-        if (!anomaliesResp.ok) throw new Error(anomaliesData.error || 'Failed to load anomalies');
+        if (!kpiResp.ok)       throw new Error(kpiData.error      || 'Failed to load KPIs');
+        if (!catResp.ok)       throw new Error(catData.error      || 'Failed to load categories');
+        if (!mwResp.ok)        throw new Error(mwData.error       || 'Failed to load margin waterfall');
+        if (!skusResp.ok)      throw new Error(skusData.error     || 'Failed to load top SKUs');
+        if (!anomaliesResp.ok) throw new Error(anomaliesData.error|| 'Failed to load anomalies');
 
         setKpis(kpiData);
         setCats(catData.rows || []);
@@ -106,7 +124,14 @@ export default function Dashboard() {
         setErr(String(e.message || e));
       }
     })();
-  }, [range, selectedStore, selectedSku]);  // refetch when timeframe or filters change
+  }, [range, selectedStore, selectedCategory, selectedSku]);  // UPDATED: refetch when timeframe or any filter changes
+
+  // Compute filtered store list based on search input
+  const filteredStoreList = storeList.filter(s => {
+    const term = storeFilter.toLowerCase();
+    const name = (s.name || `Store ${s.id}`).toLowerCase();
+    return name.includes(term) || String(s.id).toLowerCase().includes(term);
+  });
 
   return (
     <main className="grid gap-4">
@@ -121,11 +146,25 @@ export default function Dashboard() {
             <option value="90">Last 90 days</option>
             <option value="ytd">Year to Date</option>
           </select>
-          {/* Store selector */}
-          <select value={selectedStore} onChange={e => { setSelectedStore(e.target.value); }} className="select">
+          {/* Store search and selector */}
+          <input 
+            type="text" 
+            value={storeFilter} 
+            onChange={e => setStoreFilter(e.target.value)} 
+            placeholder="Search store..." 
+            className="input w-40" 
+          />
+          <select value={selectedStore} onChange={e => setSelectedStore(e.target.value)} className="select">
             <option value="">All Stores</option>
-            {storeList.map(s => (
+            {filteredStoreList.map(s => (
               <option key={s.id} value={s.id}>{s.name || `Store ${s.id}`}</option>
+            ))}
+          </select>
+          {/* Category selector */}
+          <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="select">
+            <option value="">All Categories</option>
+            {categoryList.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
         </div>
@@ -153,7 +192,7 @@ export default function Dashboard() {
         </div>
       </div>
       
-      {/* Revenue trend chart (interactive) */}
+      {/* Revenue trend chart */}
       <div className="card">
         <div className="h2 mb-2">Revenue Trend</div>
         <ResponsiveContainer width="100%" height={250}>
@@ -167,22 +206,35 @@ export default function Dashboard() {
           </LineChart>
         </ResponsiveContainer>
         <div className="text-sm text-muted mt-1">
-          *Revenue over time{selectedStore && ` for Store ${selectedStore}`}{selectedSku && ` for SKU ${selectedSku}`}
+          *Revenue over time
+          {selectedStore && ` for Store ${selectedStore}`}
+          {selectedCategory && ` for Category ${selectedCategory}`}
+          {selectedSku && ` for SKU ${selectedSku}`}
         </div>
       </div>
 
-      {/* Top categories and Top SKUs side by side */}
+      {/* Top Categories and Top SKUs side by side */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
           <div className="h2 mb-3">Top Categories</div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead><tr className="text-left">
-                <th className="p-2">Category</th><th className="p-2">Revenue</th><th className="p-2">GM$</th><th className="p-2">GM%</th><th className="p-2">Units</th>
-              </tr></thead>
+              <thead>
+                <tr className="text-left">
+                  <th className="p-2">Category</th>
+                  <th className="p-2">Revenue</th>
+                  <th className="p-2">GM$</th>
+                  <th className="p-2">GM%</th>
+                  <th className="p-2">Units</th>
+                </tr>
+              </thead>
               <tbody>
                 {cats.map(c => (
-                  <tr key={c.category} className="border-t">
+                  <tr 
+                    key={c.category} 
+                    className="border-t hover:bg-gray-50 cursor-pointer" 
+                    onClick={() => setSelectedCategory(c.category)}
+                  >
                     <td className="p-2">{c.category}</td>
                     <td className="p-2">${Math.round(c.rev).toLocaleString()}</td>
                     <td className="p-2">${Math.round(c.gm).toLocaleString()}</td>
@@ -193,19 +245,33 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
+          {selectedCategory && (
+            <div className="text-sm mt-2">
+              <button onClick={() => setSelectedCategory('')} className="link">← Back to all Categories</button>
+            </div>
+          )}
         </div>
 
         <div className="card">
           <div className="h2 mb-3">Top SKUs</div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead><tr className="text-left">
-                <th className="p-2">SKU</th><th className="p-2">Revenue</th><th className="p-2">GM$</th><th className="p-2">GM%</th><th className="p-2">Units</th>
-              </tr></thead>
+              <thead>
+                <tr className="text-left">
+                  <th className="p-2">SKU</th>
+                  <th className="p-2">Revenue</th>
+                  <th className="p-2">GM$</th>
+                  <th className="p-2">GM%</th>
+                  <th className="p-2">Units</th>
+                </tr>
+              </thead>
               <tbody>
                 {topSkus.map(item => (
-                  <tr key={item.sku} className="border-t hover:bg-gray-50 cursor-pointer"
-                      onClick={() => setSelectedSku(item.sku)}>
+                  <tr 
+                    key={item.sku} 
+                    className="border-t hover:bg-gray-50 cursor-pointer"
+                    onClick={() => setSelectedSku(item.sku)}
+                  >
                     <td className="p-2">{item.sku}</td>
                     <td className="p-2">${Math.round(item.revenue).toLocaleString()}</td>
                     <td className="p-2">${Math.round(item.gm_dollar).toLocaleString()}</td>
@@ -224,7 +290,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Margin waterfall and Anomalies side by side */}
+      {/* Margin Waterfall and Anomalies side by side */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
           <div className="h2 mb-3">Margin Waterfall</div>
@@ -249,14 +315,23 @@ export default function Dashboard() {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="text-left">
-                  <th className="p-2">Date</th><th className="p-2">Category</th><th className="p-2">Revenue</th><th className="p-2">Δ vs avg</th>
-                </tr></thead>
+                <thead>
+                  <tr className="text-left">
+                    <th className="p-2">Date</th>
+                    <th className="p-2">Category</th>
+                    <th className="p-2">Revenue</th>
+                    <th className="p-2">Δ vs avg</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {anomalies.map((a, idx) => (
                     <tr key={idx} className="border-t">
                       <td className="p-2">{a.date}</td>
-                      <td className="p-2">{a.category}</td>
+                      <td className="p-2">
+                        <button onClick={() => setSelectedCategory(a.category)} className="link">
+                          {a.category}
+                        </button>
+                      </td>
                       <td className="p-2">${Math.round(a.revenue).toLocaleString()}</td>
                       <td className="p-2">{a.delta_pct.toFixed(1)}%</td>
                     </tr>
