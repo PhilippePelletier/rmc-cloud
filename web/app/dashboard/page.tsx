@@ -9,8 +9,18 @@ interface Kpis {
   gm_dollar: number;
   gm_pct: number;
   units: number;
+  trend: { date: string; revenue: number }[];   // add trend timeseries
+  series: { date: string; revenue: number }[];  // legacy alias for trend
+  disc_pct?: number;  // optional: discount% if ever used
 };
-type Cat = { /* ... */ };
+type Cat = {
+  category: string;
+  rev: number;
+  gm: number;
+  gm_pct: number;
+  units: number;
+};
+
 
 export default function Dashboard() {
   // New state for filters:
