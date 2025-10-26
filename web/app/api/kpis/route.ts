@@ -20,8 +20,10 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     let from = url.searchParams.get("from"); // YYYY-MM-DD
     let to   = url.searchParams.get("to");   // YYYY-MM-DD
+    const store = url.searchParams.get("store");      // store ID filter (optional)
+    const sku   = url.searchParams.get("sku");        // SKU filter (optional)
 
-    // Optional: sensible default window (last 90 days) if not provided
+    // If date range not provided, default to last 90 days (same as existing logic)
     if (!from || !to) {
       const end = new Date();
       const start = new Date();
@@ -33,58 +35,104 @@ export async function GET(req: NextRequest) {
       if (!to)   to   = `${y(end)}-${m(end)}-${dd(end)}`;
     }
 
-    // Pull daily aggregates
-    let q = supabase
-      .from("daily_agg")
+    // **New:** If a specific SKU is requested, query the sales table for that SKU.
+    if (sku) {
+      let qs = supabase.from("sales")
+        .select("date, net_sales, gm_dollar, cost, units")
+        .eq("group_id", groupId)
+        .eq("sku", sku);
+      if (store) qs = qs.eq("store_id", store);
+      if (from)  qs = qs.gte("date", from);
+      if (to)    qs = qs.lte("date", to);
+
+      const { data: salesRows, error: salesErr } = await qs;
+      if (salesErr) {
+        return NextResponse.json({ error: salesErr.message }, { status: 500 });
+      }
+      const rows = salesRows ?? [];
+
+      // Aggregate the salesRows by date to build a daily trend for this SKU
+      const trend: Array<{ date: string; revenue: number }> = [];
+      const totals = { revenue: 0, gm_dollar: 0, units: 0 };
+      const revenueByDate: Record<string, number> = {};
+      const gmByDate: Record<string, number> = {};
+      const unitsByDate: Record<string, number> = {};
+
+      for (const r of rows) {
+        const d = r.date;
+        const rev = Number(r.net_sales ?? 0);
+        const gm  = Number(r.gm_dollar ?? (r.net_sales ?? 0) - (r.cost ?? 0));  // gm_dollar might not be stored in sales, compute if needed
+        const u   = Number(r.units ?? 0);
+        // accumulate totals
+        totals.revenue   += rev;
+        totals.gm_dollar += gm;
+        totals.units     += u;
+        // accumulate per date (for trend)
+        revenueByDate[d] = (revenueByDate[d] || 0) + rev;
+        gmByDate[d]      = (gmByDate[d] || 0) + gm;
+        unitsByDate[d]   = (unitsByDate[d] || 0) + u;
+      }
+      // Build sorted trend array
+      const allDates = Object.keys(revenueByDate).sort();
+      for (const d of allDates) {
+        trend.push({ date: d, revenue: revenueByDate[d] });
+      }
+
+      const revenue = totals.revenue;
+      const gm_dollar = totals.gm_dollar;
+      const units = totals.units;
+      const gm_pct = revenue ? gm_dollar / revenue : 0;
+      const disc_pct = 0;  // (Discount% can be set to 0 or computed similarly if needed)
+
+      return NextResponse.json({
+        revenue,
+        gm_dollar,
+        gm_pct,
+        units,
+        disc_pct,
+        trend,
+        series: trend  // alias for compatibility with front-end
+      });
+    }
+
+    // **Existing logic for all SKUs (possibly filtered by store):** 
+    let q = supabase.from("daily_agg")
       .select("date, net_sales, gm_dollar, units")
       .eq("group_id", groupId);
-
-    if (from) q = q.gte("date", from);
-    if (to)   q = q.lte("date", to);
+    if (store) q = q.eq("store_id", store);           // filter by store if provided
+    if (from)  q = q.gte("date", from);
+    if (to)    q = q.lte("date", to);
 
     const { data, error } = await q.order("date", { ascending: true });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+    const rows = (data ?? []) as Array<{
+      date: string; net_sales: number | null; gm_dollar: number | null; units: number | null;
+    }>;
 
-    const rows: DailyAggRow[] = (data ?? []) as DailyAggRow[];
+    // Compute aggregate KPIs from the filtered rows
+    const revenue   = rows.reduce((sum, r) => sum + Number(r.net_sales ?? 0), 0);
+    const gm_dollar = rows.reduce((sum, r) => sum + Number(r.gm_dollar ?? 0), 0);
+    const units     = rows.reduce((sum, r) => sum + Number(r.units ?? 0), 0);
+    const gm_pct    = revenue ? gm_dollar / revenue : 0;
 
-    const revenue   = rows.reduce((a, r) => a + Number(r.net_sales  ?? 0), 0);
-    const gm_dollar = rows.reduce((a, r) => a + Number(r.gm_dollar ?? 0), 0);
-    const units     = rows.reduce((a, r) => a + Number(r.units     ?? 0), 0);
+    // (Optional: Compute disc_pct if needed, similar to original code using sales table)
 
-    // Optional: compute discount% from the sales table if you track `discount`
-    // Comment this block out if you prefer disc_pct: 0
-    let disc_pct = 0;
-    {
-      let qs = supabase
-        .from("sales")
-        .select("net_sales, discount")
-        .eq("group_id", groupId);
-      if (from) qs = qs.gte("date", from);
-      if (to)   qs = qs.lte("date", to);
-
-      const { data: salesRows, error: salesErr } = await qs.limit(50000); // safety cap
-      if (!salesErr && salesRows) {
-        const disc = salesRows.reduce((a, r: any) => a + Number(r.discount ?? 0), 0);
-        const ns   = salesRows.reduce((a, r: any) => a + Number(r.net_sales ?? 0), 0);
-        disc_pct = ns > 0 ? disc / ns : 0;
-      }
-    }
-
+    // Prepare trend series for revenue over time
     const trend = rows.map(r => ({
       date: r.date,
-      revenue: Number(r.net_sales ?? 0),
+      revenue: Number(r.net_sales ?? 0)
     }));
 
     return NextResponse.json({
       revenue,
       gm_dollar,
-      gm_pct: revenue ? gm_dollar / revenue : 0,
+      gm_pct,
       units,
-      disc_pct,          // set to 0 if you don't want the extra sales query
+      disc_pct: 0,       // keep 0 or calculate actual discount% if required
       trend,
-      series: trend,     // legacy alias your charts use
+      series: trend
     });
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : "Unexpected error";
