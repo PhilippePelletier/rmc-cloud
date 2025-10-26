@@ -130,7 +130,7 @@ export default function Dashboard() {
         </div>
         <div className="card">
           <div className="label">GM%</div>
-          <div className="stat">{((kpis?.gm_pct ?? 0) * 100).toFixed(1)}%</</div>
+          <div className="stat">{((kpis?.gm_pct ?? 0) * 100).toFixed(1)}%</div>
         </div>
         <div className="card">
           <div className="label">Units</div>
