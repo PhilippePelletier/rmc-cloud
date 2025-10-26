@@ -13,9 +13,19 @@ export async function GET(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  const stores = (data ?? []).map(row => ({
-    id: row.store_id,
-    name: row.store_name,
-  }));
+  // Ensure unique stores (no duplicates)
+  const rows = data ?? [];
+  const unique: Record<string, string | null> = {};
+  for (const row of rows) {
+    const id = String(row.store_id);
+    // If duplicate ID exists, prefer the one with a name
+    if (!(id in unique) || (!unique[id] && row.store_name)) {
+      unique[id] = row.store_name;
+    }
+  }
+  // Prepare sorted unique store list
+  const stores = Object.entries(unique)
+    .sort(([idA], [idB]) => idA.localeCompare(idB, undefined, { numeric: true }))
+    .map(([id, name]) => ({ id, name }));
   return NextResponse.json({ stores });
 }
