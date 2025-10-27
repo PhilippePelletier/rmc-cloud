@@ -543,11 +543,11 @@ export default function DashboardPage() {
                   // show subtle dots only on anomaly dates (for clarity, always show for all metrics)
                   r: 0,
                 }}
-                activeDot={({ cx, cy, payload }) =>
-                  anomalyDateSet.has(payload.date) ? (
-                    <circle cx={cx} cy={cy} r={6} fill="#e63946" stroke="#e63946" />
+                activeDot={(props: any) =>
+                  anomalyDateSet.has(props.payload.date) ? (
+                    <circle cx={props.cx} cy={props.cy} r={6} fill="#e63946" stroke="#e63946" />
                   ) : (
-                    <circle cx={cx} cy={cy} r={4} />
+                    <circle cx={props.cx} cy={props.cy} r={4} />
                   )
                 }
               />
