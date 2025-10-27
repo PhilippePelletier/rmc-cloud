@@ -186,11 +186,10 @@ export default function Dashboard() {
   });
 
   return (
-    <main className="grid gap-4">
-      {/* Header: Title and Filters */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Dashboard</h2>
-        <div className="flex gap-2">
+    <main className="md:grid md:grid-cols-4 gap-4">
+      {/* Sidebar: All filters */}
+      <aside className="col-span-1 card p-4 space-y-2">
+        <h3 className="text-lg font-semibold">Filters</h3>
           {/* Timeframe selector */}
           <select value={range} onChange={e=>setRange(e.target.value as any)} className="select">
             <option value="7">Last 7 days</option>
@@ -282,7 +281,11 @@ export default function Dashboard() {
           >Cancel</button>
         </div>
       )}
-
+    </aside>
+  
+    {/* Main content */}
+    <section className="col-span-3">
+      <h2 className="text-xl font-semibold">Dashboard</h2>
       {err && <div className="card text-red-600">{err}</div>}
 
       {/* KPI Tiles */}
