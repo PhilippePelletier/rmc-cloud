@@ -1,7 +1,6 @@
 // app/api/anomaly-explain/route.ts  (new file)
 import { NextResponse, NextRequest } from 'next/server';
 import { getApiContext } from '@/app/lib/api-ctx';
-import fetch from 'node-fetch';
 
 export async function GET(req: NextRequest) {
   const ctx = await getApiContext();
