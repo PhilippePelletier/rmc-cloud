@@ -208,8 +208,97 @@ export default function Dashboard() {
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
+          {/* SKU filter (new) */}
+          <input 
+            type="text" 
+            value={skuFilter} 
+            onChange={e => setSkuFilter(e.target.value)} 
+            placeholder="Search SKU..." 
+            className="input w-40"
+          />
+          <select 
+            value={selectedSku} 
+            onChange={e => setSelectedSku(e.target.value)} 
+            className="select"
+          >
+            <option value="">All SKUs</option>
+            {skuList
+              .filter(sku => sku.toLowerCase().includes(skuFilter.toLowerCase()))
+              .map(sku => (
+                <option key={sku} value={sku}>{sku}</option>
+              ))}
+          </select>
+          {selectedSku && (
+            <button 
+              type="button" 
+              onClick={() => { setSelectedSku(''); setSkuFilter(''); }} 
+              className="btn btn-sm"
+              title="Clear SKU filter"
+            >
+              ✕
+            </button>
+          )}
+        
+          {/* Date range selector (existing) */}
+          <select value={range} onChange={e => setRange(e.target.value as any)} className="select">
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="ytd">Year to Date</option>
+          </select>
+        
+          {/* Custom range toggle (new) */}
+          <button type="button" onClick={() => setShowCustom(true)} className="btn">
+            Custom Range
+          </button>
+        
+          {/* Reset all filters (new) */}
+          <button type="button" onClick={handleReset} className="btn btn-outline ml-auto">
+            Reset Filters
+          </button>
         </div>
       </div>
+
+      {showCustom && (
+        <div className="flex items-center gap-2 mb-4">
+          <input 
+            type="date" 
+            value={customFrom} 
+            onChange={e => setCustomFrom(e.target.value)} 
+            className="input"
+          />
+          <span>to</span>
+          <input 
+            type="date" 
+            value={customTo} 
+            onChange={e => setCustomTo(e.target.value)} 
+            className="input"
+          />
+          <button 
+            type="button" 
+            className="btn" 
+            onClick={() => {
+              if (customFrom && customTo) {
+                setRange('custom')
+                setShowCustom(false)
+              }
+            }}
+          >
+            Apply
+          </button>
+          <button 
+            type="button" 
+            className="btn" 
+            onClick={() => {
+              setShowCustom(false)
+              // (Optional) clear customFrom/To if canceling:
+              // setCustomFrom(''); setCustomTo('');
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {err && <div className="card text-red-600">{err}</div>}
 
@@ -234,24 +323,102 @@ export default function Dashboard() {
       </div>
       
       {/* Revenue trend chart */}
-      <div className="card">
-        <div className="h2 mb-2">Revenue Trend</div>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={kpis?.series || kpis?.trend || []}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" tick={{ fontSize: 12 }}
-                   tickFormatter={(dateStr) => dayjs(dateStr).format('MMM D')} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip formatter={(val: number) => `$${Math.round(val).toLocaleString()}`} />
-            <Line type="monotone" dataKey="revenue" stroke="#0077b6" strokeWidth={2} dot={false} />
+      <div className="card mb-4">
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-xl font-semibold">
+            {metric === 'revenue' && 'Revenue Trend'}
+            {metric === 'gm_dollar' && 'Gross Margin $ Trend'}
+            {metric === 'gm_pct' && 'Gross Margin % Trend'}
+            {metric === 'units' && 'Units Sold Trend'}
+          </h2>
+          <div>
+            <button 
+              className={`btn btn-sm ${metric === 'revenue' ? 'btn-active' : ''}`} 
+              onClick={() => setMetric('revenue')}
+            >
+              Revenue
+            </button>
+            <button 
+              className={`btn btn-sm ${metric === 'gm_dollar' ? 'btn-active' : ''}`} 
+              onClick={() => setMetric('gm_dollar')}
+            >
+              GM$
+            </button>
+            <button 
+              className={`btn btn-sm ${metric === 'gm_pct' ? 'btn-active' : ''}`} 
+              onClick={() => setMetric('gm_pct')}
+            >
+              GM%
+            </button>
+            <button 
+              className={`btn btn-sm ${metric === 'units' ? 'btn-active' : ''}`} 
+              onClick={() => setMetric('units')}
+            >
+              Units
+            </button>
+          </div>
+        </div>
+        
+        {/* Line chart for the selected metric */}
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={kpis?.series || []}>
+            <CartesianGrid stroke="#f5f5f5" />
+            <XAxis 
+              dataKey="date" 
+              tick={{ fontSize: 12 }} 
+              tickFormatter={(dateStr) => formatDateTick(dateStr)}  // assume you have a date formatter
+            />
+            <YAxis 
+              tick={{ fontSize: 12 }} 
+              tickFormatter={(val) => {
+                if (metric === 'gm_pct') return (val * 100).toFixed(0) + '%'
+                if (metric === 'revenue' || metric === 'gm_dollar') return '$' + Math.round(val).toLocaleString()
+                return Math.round(val).toLocaleString()
+              }}
+            />
+            <Tooltip 
+              formatter={(val: number) => {
+                if (metric === 'gm_pct') return (val * 100).toFixed(1) + '%'
+                if (metric === 'revenue' || metric === 'gm_dollar') return '$' + Math.round(val).toLocaleString()
+                return Math.round(val).toLocaleString()
+              }}
+              labelFormatter={(dateStr) => `Date: ${dateStr}`}
+            />
+            <Line 
+              type="monotone" 
+              dataKey={metric} 
+              stroke={
+                metric === 'revenue' ? "#0077b6" 
+                : metric === 'gm_dollar' ? "#52b788" 
+                : metric === 'gm_pct' ? "#ffb703" 
+                : "#fb8500"
+              }
+              strokeWidth={2}
+              dot={(props) => {
+                // Highlight anomaly dates with a red dot
+                const dt = props.payload.date
+                const anomalyDates = new Set(anomalies.map(a => a.date))
+                if (anomalyDates.has(dt)) {
+                  return <circle cx={props.cx} cy={props.cy} r={5} fill="red" stroke="red" />
+                }
+                return null
+              }}
+              activeDot={{ r: 6 }}
+            />
           </LineChart>
         </ResponsiveContainer>
-        <div className="text-sm text-muted mt-1">
-          *Revenue over time
-          {selectedStore && ` for Store ${selectedStore}`}
-          {selectedCategory && ` for Category ${selectedCategory}`}
-          {selectedSku && ` for SKU ${selectedSku}`}
-        </div>
+      
+        {/* (Optional) descriptive text */}
+        <p className="text-sm text-gray-600 mt-2">
+          {metric === 'revenue' && 'Revenue'}
+          {metric === 'gm_dollar' && 'Gross Margin $'}
+          {metric === 'gm_pct' && 'Gross Margin %'}
+          {metric === 'units' && 'Units'}
+          {` over time for ${selectedStore ? 'Store ' + storeNameMap[selectedStore] : 'All Stores'}, `}
+          {selectedCategory ? `Category "${selectedCategory}"` : 'All Categories'}
+          {selectedSku ? `, SKU ${selectedSku}` : ''}
+          {` from ${formatDate(from)} to ${formatDate(to)}.`}
+        </p>
       </div>
 
       {/* Top Categories and Top SKUs side by side */}
