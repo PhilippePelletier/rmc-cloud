@@ -273,6 +273,7 @@ export default function DashboardPage() {
       <h1 className="text-3xl font-bold text-center mb-6">Dashboard</h1>
        {/* Filter controls wrapped in a light-card container */}
       <div className="bg-gray-100 p-4 rounded-lg shadow flex flex-wrap items-center gap-4">
+        <div>
           {/* Timeframe */}
           <div>
             <label className="label block mb-1">Timeframe</label>
