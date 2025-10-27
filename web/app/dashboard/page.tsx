@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
-  CartesianGrid, ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Tooltip
 } from 'recharts';
 
 interface Kpis {
