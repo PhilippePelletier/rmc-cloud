@@ -20,6 +20,13 @@ type Cat = {
   gm_pct: number;
   units: number;
 };
+type Anomaly = {
+  date: string;
+  category: string;
+  revenue: number;
+  delta_pct: number;
+};
+
 
 export default function Dashboard() {
   // States for filters:
