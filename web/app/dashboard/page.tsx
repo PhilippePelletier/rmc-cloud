@@ -268,11 +268,11 @@ export default function DashboardPage() {
 
   // ---- Render ----
   return (
-    <main className="space-y-4 p-4">
-      {/* Top filters bar */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <h2 className="text-xl font-semibold">Dashboard</h2>
-        <div className="flex flex-wrap gap-4">
+    <main className="p-6">
+      {/* Centered Dashboard title */}
+      <h1 className="text-3xl font-bold text-center mb-6">Dashboard</h1>
+       {/* Filter controls wrapped in a light-card container */}
+      <div className="bg-gray-100 p-4 rounded-lg shadow flex flex-wrap items-center gap-4">
           {/* Timeframe */}
           <div>
             <label className="label block mb-1">Timeframe</label>
@@ -426,6 +426,9 @@ export default function DashboardPage() {
 
       {/* Error */}
       {err && <div className="card text-red-600 p-3">{err}</div>}
+
+      {/* Subtle divider line */}
+      <hr className="border-t border-gray-300 my-6" />
 
       {/* KPI Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
