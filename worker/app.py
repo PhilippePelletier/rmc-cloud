@@ -225,7 +225,7 @@ Metrics:
 
     try:
         resp = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model="gpt-5",
             messages=[
                 {"role": "system", "content": "You are a concise, helpful business analyst."},
                 {"role": "user", "content": prompt},
