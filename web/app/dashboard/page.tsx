@@ -85,6 +85,9 @@ export default function DashboardPage() {
 
   const [metric, setMetric] = useState<'revenue' | 'gm_dollar' | 'gm_pct' | 'units'>('revenue');
 
+  // Unified filter search query
+  const [unifiedQuery, setUnifiedQuery] = useState('');
+
   // ---- Data state ----
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -236,7 +239,40 @@ export default function DashboardPage() {
     setSelectedCategory('');
     setSelectedSku('');
     setSkuFilter('');
+    setUnifiedQuery('');
     setMetric('revenue');
+  }
+
+  function handleResetData() {
+    handleReset();
+    setKpis(null);
+    setCategories([]);
+    setMarginSteps([]);
+    setTopSkus([]);
+    setAnomalies([]);
+  }
+
+  function handleUnifiedSelect() {
+    const val = unifiedQuery.trim();
+    if (!val) return;
+    if (val.startsWith('Store: ')) {
+      const name = val.slice(7);
+      const store = storeList.find((s) => s.name === name || s.id === name);
+      if (store) {
+        setSelectedStore(store.id);
+      }
+    } else if (val.startsWith('SKU: ')) {
+      const sku = val.slice(5);
+      if (skuList.includes(sku)) {
+        setSelectedSku(sku);
+      }
+    } else if (val.startsWith('Category: ')) {
+      const cat = val.slice(10);
+      if (categoryList.includes(cat)) {
+        setSelectedCategory(cat);
+      }
+    }
+    setUnifiedQuery('');
   }
 
   // ---- Sidebar anomaly explainer (opens from table click) ----
@@ -271,158 +307,112 @@ export default function DashboardPage() {
     <main className="p-6">
       {/* Centered Dashboard title */}
       <h1 className="text-3xl font-bold text-center mb-6">Dashboard</h1>
-       {/* Filter controls wrapped in a light-card container */}
-      <div className="bg-gray-100 p-4 rounded-lg shadow flex flex-wrap items-center gap-4">
-          {/* Timeframe */}
-          <div>
-            <label className="label block mb-1">Timeframe</label>
-            <select
-              value={range}
-              onChange={(e) => setRange(e.target.value as any)}
-              className="select"
-            >
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-              <option value="90">Last 90 days</option>
-              <option value="ytd">Year to Date</option>
-              <option value="custom">Custom…</option>
-            </select>
-            {range === 'custom' && (
-              <div className="mt-2 space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="input flex-1"
-                  />
-                  <span>to</span>
-                  <input
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="input flex-1"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="btn flex-1"
-                    onClick={() => {
-                      /* Apply already triggers effect */
-                    }}
-                  >
-                    Apply
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline flex-1"
-                    onClick={() => {
-                      setCustomFrom('');
-                      setCustomTo('');
-                      setRange('90');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
+
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        {/* Unified Filters */}
+        <div className="card p-4 flex-1">
+          <label className="label block mb-1">Filters</label>
+          <input
+            type="text"
+            list="unified-suggestions"
+            value={unifiedQuery}
+            onChange={(e) => setUnifiedQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleUnifiedSelect(); }}
+            onBlur={handleUnifiedSelect}
+            placeholder="Store, SKU, or Category"
+            className="input w-full"
+          />
+          <datalist id="unified-suggestions">
+            {storeList.map((s) => (
+              <option key={`store-${s.id}`} value={`Store: ${s.name}`} />
+            ))}
+            {categoryList.map((c) => (
+              <option key={`cat-${c}`} value={`Category: ${c}`} />
+            ))}
+            {skuList.slice(0, 100).map((sku) => (
+              <option key={`sku-${sku}`} value={`SKU: ${sku}`} />
+            ))}
+          </datalist>
+        </div>
+
+        {/* Timeframe */}
+        <div className="card p-4 flex-1">
+          <label className="label block mb-1">Timeframe</label>
+          <select
+            value={range}
+            onChange={(e) => setRange(e.target.value as any)}
+            className="select w-full"
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="ytd">Year to Date</option>
+            <option value="custom">Custom…</option>
+          </select>
+          {range === 'custom' && (
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="input flex-1"
+                />
+                <span>to</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="input flex-1"
+                />
               </div>
-            )}
-          </div>
-
-          {/* Store */}
-          <div>
-            <label className="label block mb-1">Store</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={storeFilter}
-                onChange={(e) => setStoreFilter(e.target.value)}
-                placeholder="Search store…"
-                className="input flex-1"
-              />
-              <select
-                value={selectedStore}
-                onChange={(e) => setSelectedStore(e.target.value)}
-                className="select flex-1"
-              >
-                <option value="">All Stores</option>
-                {filteredStoreList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name || `Store ${s.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="label block mb-1">Category</label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="select"
-            >
-              <option value="">All Categories</option>
-              {categoryList.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* SKU */}
-          <div>
-            <label className="label block mb-1">SKU</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={skuFilter}
-                onChange={(e) => setSkuFilter(e.target.value)}
-                placeholder="Search SKU…"
-                className="input flex-1"
-              />
-              <select
-                value={selectedSku}
-                onChange={(e) => setSelectedSku(e.target.value)}
-                className="select flex-1"
-              >
-                <option value="">All SKUs</option>
-                {skuList
-                  .filter((sku) => sku.toLowerCase().includes(skuFilter.toLowerCase()))
-                  .slice(0, 400)
-                  .map((sku) => (
-                    <option key={sku} value={sku}>
-                      {sku}
-                    </option>
-                  ))}
-              </select>
-              {selectedSku && (
+              <div className="flex gap-2">
                 <button
                   type="button"
+                  className="btn flex-1"
                   onClick={() => {
-                    setSelectedSku('');
-                    setSkuFilter('');
+                    /* Apply already triggers effect */
                   }}
-                  className="btn btn-sm"
-                  title="Clear SKU filter"
                 >
-                  ✕
+                  Apply
                 </button>
-              )}
+                <button
+                  type="button"
+                  className="btn btn-outline flex-1"
+                  onClick={() => {
+                    setCustomFrom('');
+                    setCustomTo('');
+                    setRange('90');
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-
-          {/* Reset */}
-          <div>
-            <button type="button" onClick={handleReset} className="btn btn-outline">
-              Reset Filters
-            </button>
-          </div>
+          )}
         </div>
-      
+
+        {/* Settings */}
+        <div className="card p-4 flex-1">
+          <label className="label block mb-1">Settings</label>
+          <details className="dropdown">
+            <summary className="btn w-full">☰ Menu</summary>
+            <ul className="dropdown-content menu p-2 shadow bg-white rounded-box w-52">
+              <li>
+                <button type="button" onClick={handleReset} className="flex items-center gap-2">
+                  🔄 Reset Filters
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={handleResetData} className="flex items-center gap-2 text-red-600">
+                  🗑️ Reset Data
+                </button>
+              </li>
+            </ul>
+          </details>
+        </div>
+      </div>
+
       {/* Error */}
       {err && <div className="card text-red-600 p-3">{err}</div>}
 
@@ -532,7 +522,7 @@ export default function DashboardPage() {
               }
               strokeWidth={2}
               dot={{
-                // show subtle dots only on anomaly dates (for clarity, always show for all metrics)
+                // subtle dot styling
                 r: 0,
               }}
               activeDot={(props: any) =>
@@ -564,7 +554,6 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card p-4">
           <div className="h2 mb-2">Top Categories</div>
-
           {/* Pie */}
           {categories.length > 0 && (
             <ResponsiveContainer width="100%" height={240}>
