@@ -428,7 +428,7 @@ export default function DashboardPage() {
       {err && <div className="card text-red-600 p-3">{err}</div>}
 
       {/* Subtle divider line */}
-      <hr className="border-t border-gray-300 my-6" />
+      <hr className="border-t border-gray-300 my-6" /></hr>
 
       {/* KPI Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
