@@ -771,7 +771,6 @@ export default function DashboardPage() {
               <p>Analyzing anomaly…</p>
             )}
           </div>
-        </div>
       )}
     </main>
   );
