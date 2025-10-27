@@ -344,16 +344,16 @@ export default function Dashboard() {
             <YAxis 
               tick={{fontSize:12}}
               tickFormatter={val=>{
-                if(metric==='gm_pct') return (val*100).toFixed(0)+'%';
-                if(metric==='revenue'||metric==='gm_dollar') return '$'+Math.round(val).toLocaleString();
-                return Math.round(val).toLocaleString();
+                if(metric==='gm_pct') return (Number(val)*100).toFixed(0)+'%';
+                if(metric==='revenue'||metric==='gm_dollar') return '$'+Math.round(Number(val)).toLocaleString();
+                return Math.round(Number(val)).toLocaleString();
               }}
             />
             <Tooltip 
               formatter={val=>{
-                if(metric==='gm_pct') return (val*100).toFixed(1)+'%';
-                if(metric==='revenue'||metric==='gm_dollar') return '$'+Math.round(val).toLocaleString();
-                return Math.round(val).toLocaleString();
+                if(metric==='gm_pct') return (Number(val)*100).toFixed(1)+'%';
+                if(metric==='revenue'||metric==='gm_dollar') return '$'+Math.round(Number(val)).toLocaleString();
+                return Math.round(Number(val)).toLocaleString();
               }}
               labelFormatter={d=>d}
             />
