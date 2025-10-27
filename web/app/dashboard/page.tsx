@@ -75,7 +75,6 @@ export default function DashboardPage() {
   const [range, setRange] = useState<'7' | '30' | '90' | 'ytd' | 'custom'>('90');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [showCustom, setShowCustom] = useState(false);
 
   const [selectedStore, setSelectedStore] = useState('');
   const [storeFilter, setStoreFilter] = useState('');
@@ -232,7 +231,6 @@ export default function DashboardPage() {
     setRange('90');
     setCustomFrom('');
     setCustomTo('');
-    setShowCustom(false);
     setSelectedStore('');
     setStoreFilter('');
     setSelectedCategory('');
@@ -270,477 +268,474 @@ export default function DashboardPage() {
 
   // ---- Render ----
   return (
-    <main className="gap-4 md:grid md:grid-cols-4">
-      {/* Sidebar: Filters */}
-      <aside className="card col-span-1 p-4 space-y-3">
-        <div className="text-lg font-semibold">Filters</div>
+    <main className="space-y-4 p-4">
+      {/* Top filters bar */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <h2 className="text-xl font-semibold">Dashboard</h2>
+        <div className="flex flex-wrap gap-4">
+          {/* Timeframe */}
+          <div>
+            <label className="label block mb-1">Timeframe</label>
+            <select
+              value={range}
+              onChange={(e) => setRange(e.target.value as any)}
+              className="select"
+            >
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="ytd">Year to Date</option>
+              <option value="custom">Custom…</option>
+            </select>
+            {range === 'custom' && (
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="input flex-1"
+                  />
+                  <span>to</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="input flex-1"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn flex-1"
+                    onClick={() => {
+                      /* Apply already triggers effect */
+                    }}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline flex-1"
+                    onClick={() => {
+                      setCustomFrom('');
+                      setCustomTo('');
+                      setRange('90');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
-        {/* Timeframe presets */}
-        <div>
-          <label className="label block mb-1">Timeframe</label>
-          <select
-            value={range}
-            onChange={(e) => setRange(e.target.value as any)}
-            className="select w-full"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="ytd">Year to Date</option>
-            <option value="custom">Custom…</option>
-          </select>
-        </div>
-
-        {/* Custom date range */}
-        {range === 'custom' && (
-          <div className="space-y-2">
+          {/* Store */}
+          <div>
+            <label className="label block mb-1">Store</label>
             <div className="flex items-center gap-2">
               <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
+                type="text"
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value)}
+                placeholder="Search store…"
                 className="input flex-1"
               />
-              <span>to</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="input flex-1"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="btn flex-1"
-                onClick={() => {
-                  if (customFrom && customTo) {
-                    // already applied by state; effect runs
-                  }
-                }}
+              <select
+                value={selectedStore}
+                onChange={(e) => setSelectedStore(e.target.value)}
+                className="select flex-1"
               >
-                Apply
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline flex-1"
-                onClick={() => {
-                  setCustomFrom('');
-                  setCustomTo('');
-                  setRange('90');
-                }}
-              >
-                Cancel
-              </button>
+                <option value="">All Stores</option>
+                {filteredStoreList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name || `Store ${s.id}`}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        )}
 
-        {/* Store search & select */}
-        <div>
-          <label className="label block mb-1">Store</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={storeFilter}
-              onChange={(e) => setStoreFilter(e.target.value)}
-              placeholder="Search store…"
-              className="input flex-1"
-            />
+          {/* Category */}
+          <div>
+            <label className="label block mb-1">Category</label>
             <select
-              value={selectedStore}
-              onChange={(e) => setSelectedStore(e.target.value)}
-              className="select flex-1"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="select"
             >
-              <option value="">All Stores</option>
-              {filteredStoreList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name || `Store ${s.id}`}
+              <option value="">All Categories</option>
+              {categoryList.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
                 </option>
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Category select */}
-        <div>
-          <label className="label block mb-1">Category</label>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="select w-full"
-          >
-            <option value="">All Categories</option>
-            {categoryList.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* SKU search & select */}
-        <div>
-          <label className="label block mb-1">SKU</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={skuFilter}
-              onChange={(e) => setSkuFilter(e.target.value)}
-              placeholder="Search SKU…"
-              className="input flex-1"
-            />
-            <select
-              value={selectedSku}
-              onChange={(e) => setSelectedSku(e.target.value)}
-              className="select flex-1"
-            >
-              <option value="">All SKUs</option>
-              {skuList
-                .filter((sku) => sku.toLowerCase().includes(skuFilter.toLowerCase()))
-                .slice(0, 400) // safety cap
-                .map((sku) => (
-                  <option key={sku} value={sku}>
-                    {sku}
-                  </option>
-                ))}
-            </select>
-            {selectedSku && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedSku('');
-                  setSkuFilter('');
-                }}
-                className="btn btn-sm"
-                title="Clear SKU filter"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Reset */}
-        <div className="pt-1">
-          <button type="button" onClick={handleReset} className="btn btn-outline w-full">
-            Reset Filters
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <section className="col-span-3 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Dashboard</h2>
-        </div>
-
-        {err && <div className="card text-red-600 p-3">{err}</div>}
-
-        {/* KPI Summary */}
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="card">
-            <div className="label">Revenue</div>
-            <div className="stat">
-              ${Math.round(kpis?.revenue ?? 0).toLocaleString()}
-            </div>
-          </div>
-          <div className="card">
-            <div className="label">GM$</div>
-            <div className="stat">
-              ${Math.round(kpis?.gm_dollar ?? 0).toLocaleString()}
-            </div>
-          </div>
-          <div className="card">
-            <div className="label">GM%</div>
-            <div className="stat">
-              {((kpis?.gm_pct ?? 0) * 100).toFixed(1)}%
-            </div>
-          </div>
-          <div className="card">
-            <div className="label">Units</div>
-            <div className="stat">{Math.round(kpis?.units ?? 0).toLocaleString()}</div>
-          </div>
-        </div>
-
-        {/* Metric toggle + Trend */}
-        <div className="card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="h2">
-              {metric === 'revenue' && 'Revenue Trend'}
-              {metric === 'gm_dollar' && 'Gross Margin $ Trend'}
-              {metric === 'gm_pct' && 'Gross Margin % Trend'}
-              {metric === 'units' && 'Units Trend'}
-            </div>
-            <div className="flex gap-2">
-              <button
-                className={`btn btn-sm ${metric === 'revenue' ? 'btn-active' : ''}`}
-                onClick={() => setMetric('revenue')}
-              >
-                Revenue
-              </button>
-              <button
-                className={`btn btn-sm ${metric === 'gm_dollar' ? 'btn-active' : ''}`}
-                onClick={() => setMetric('gm_dollar')}
-              >
-                GM$
-              </button>
-              <button
-                className={`btn btn-sm ${metric === 'gm_pct' ? 'btn-active' : ''}`}
-                onClick={() => setMetric('gm_pct')}
-              >
-                GM%
-              </button>
-              <button
-                className={`btn btn-sm ${metric === 'units' ? 'btn-active' : ''}`}
-                onClick={() => setMetric('units')}
-              >
-                Units
-              </button>
-            </div>
-          </div>
-
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 12 }}
-                tickFormatter={(d: string) => dayjs(d).format('MMM D')}
+          {/* SKU */}
+          <div>
+            <label className="label block mb-1">SKU</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={skuFilter}
+                onChange={(e) => setSkuFilter(e.target.value)}
+                placeholder="Search SKU…"
+                className="input flex-1"
               />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                tickFormatter={(val) => {
-                  if (metric === 'gm_pct') return (Number(val) * 100).toFixed(0) + '%';
-                  if (metric === 'revenue' || metric === 'gm_dollar')
-                    return '$' + Math.round(Number(val)).toLocaleString();
-                  return Math.round(Number(val)).toLocaleString();
-                }}
-              />
-              <Tooltip
-                formatter={(val) => {
-                  if (metric === 'gm_pct') return (Number(val) * 100).toFixed(1) + '%';
-                  if (metric === 'revenue' || metric === 'gm_dollar')
-                    return '$' + Math.round(Number(val)).toLocaleString();
-                  return Math.round(Number(val)).toLocaleString();
-                }}
-                labelFormatter={(d) => d}
-              />
-              <Line
-                type="monotone"
-                dataKey={metric}
-                stroke={
-                  metric === 'revenue'
-                    ? '#0077b6'
-                    : metric === 'gm_dollar'
-                    ? '#52b788'
-                    : metric === 'gm_pct'
-                    ? '#ffb703'
-                    : '#fb8500'
-                }
-                strokeWidth={2}
-                dot={{
-                  // show subtle dots only on anomaly dates (for clarity, always show for all metrics)
-                  r: 0,
-                }}
-                activeDot={(props: any) =>
-                  anomalyDateSet.has(props.payload.date) ? (
-                    <circle cx={props.cx} cy={props.cy} r={6} fill="#e63946" stroke="#e63946" />
-                  ) : (
-                    <circle cx={props.cx} cy={props.cy} r={4} />
-                  )
-                }
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="text-sm text-muted mt-1">
-            * {metric === 'revenue'
-              ? 'Revenue'
-              : metric === 'gm_dollar'
-              ? 'Gross Margin $'
-              : metric === 'gm_pct'
-              ? 'Gross Margin %'
-              : 'Units'}{' '}
-            over time
-            {selectedStore && ` · Store ${selectedStore}`}
-            {selectedCategory && ` · Category ${selectedCategory}`}
-            {selectedSku && ` · SKU ${selectedSku}`}
-          </div>
-        </div>
-
-        {/* Top Categories (Pie + Table) and Top SKUs */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="card p-4">
-            <div className="h2 mb-2">Top Categories</div>
-
-            {/* Pie */}
-            {categories.length > 0 && (
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={categories.map((c) => ({ name: c.category, value: c.rev }))}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label
-                  >
-                    {categories.map((_, i) => (
-                      <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(val) => '$' + Math.round(Number(val)).toLocaleString()}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-
-            {/* Table */}
-            <div className="overflow-x-auto mt-3">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left">
-                    <th className="p-2">Category</th>
-                    <th className="p-2">Revenue</th>
-                    <th className="p-2">GM$</th>
-                    <th className="p-2">GM%</th>
-                    <th className="p-2">Units</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((c) => (
-                    <tr
-                      key={c.category}
-                      className="border-t hover:bg-gray-50 cursor-pointer"
-                      onClick={() =>
-                        setSelectedCategory((prev) => (prev === c.category ? '' : c.category))
-                      }
-                    >
-                      <td className="p-2">{c.category}</td>
-                      <td className="p-2">${Math.round(c.rev).toLocaleString()}</td>
-                      <td className="p-2">${Math.round(c.gm).toLocaleString()}</td>
-                      <td className="p-2">{(c.gm_pct * 100).toFixed(1)}%</td>
-                      <td className="p-2">{Math.round(c.units).toLocaleString()}</td>
-                    </tr>
+              <select
+                value={selectedSku}
+                onChange={(e) => setSelectedSku(e.target.value)}
+                className="select flex-1"
+              >
+                <option value="">All SKUs</option>
+                {skuList
+                  .filter((sku) => sku.toLowerCase().includes(skuFilter.toLowerCase()))
+                  .slice(0, 400)
+                  .map((sku) => (
+                    <option key={sku} value={sku}>
+                      {sku}
+                    </option>
                   ))}
-                </tbody>
-              </table>
-            </div>
-            {selectedCategory && (
-              <div className="text-sm mt-2">
-                <button onClick={() => setSelectedCategory('')} className="link">
-                  ← Clear category
+              </select>
+              {selectedSku && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSku('');
+                    setSkuFilter('');
+                  }}
+                  className="btn btn-sm"
+                  title="Clear SKU filter"
+                >
+                  ✕
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          <div className="card p-4">
-            <div className="h2 mb-2">Top SKUs</div>
+          {/* Reset */}
+          <div>
+            <button type="button" onClick={handleReset} className="btn btn-outline">
+              Reset Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Error */}
+      {err && <div className="card text-red-600 p-3">{err}</div>}
+
+      {/* KPI Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="card">
+          <div className="label">Revenue</div>
+          <div className="stat">
+            ${Math.round(kpis?.revenue ?? 0).toLocaleString()}
+          </div>
+        </div>
+        <div className="card">
+          <div className="label">GM$</div>
+          <div className="stat">
+            ${Math.round(kpis?.gm_dollar ?? 0).toLocaleString()}
+          </div>
+        </div>
+        <div className="card">
+          <div className="label">GM%</div>
+          <div className="stat">
+            {((kpis?.gm_pct ?? 0) * 100).toFixed(1)}%
+          </div>
+        </div>
+        <div className="card">
+          <div className="label">Units</div>
+          <div className="stat">{Math.round(kpis?.units ?? 0).toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Metric toggle + Trend */}
+      <div className="card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="h2">
+            {metric === 'revenue' && 'Revenue Trend'}
+            {metric === 'gm_dollar' && 'Gross Margin $ Trend'}
+            {metric === 'gm_pct' && 'Gross Margin % Trend'}
+            {metric === 'units' && 'Units Trend'}
+          </div>
+          <div className="flex gap-2">
+            <button
+              className={`btn btn-sm ${metric === 'revenue' ? 'btn-active' : ''}`}
+              onClick={() => setMetric('revenue')}
+            >
+              Revenue
+            </button>
+            <button
+              className={`btn btn-sm ${metric === 'gm_dollar' ? 'btn-active' : ''}`}
+              onClick={() => setMetric('gm_dollar')}
+            >
+              GM$
+            </button>
+            <button
+              className={`btn btn-sm ${metric === 'gm_pct' ? 'btn-active' : ''}`}
+              onClick={() => setMetric('gm_pct')}
+            >
+              GM%
+            </button>
+            <button
+              className={`btn btn-sm ${metric === 'units' ? 'btn-active' : ''}`}
+              onClick={() => setMetric('units')}
+            >
+              Units
+            </button>
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={series}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 12 }}
+              tickFormatter={(d: string) => dayjs(d).format('MMM D')}
+            />
+            <YAxis
+              tick={{ fontSize: 12 }}
+              tickFormatter={(val) => {
+                if (metric === 'gm_pct') return (Number(val) * 100).toFixed(0) + '%';
+                if (metric === 'revenue' || metric === 'gm_dollar')
+                  return '$' + Math.round(Number(val)).toLocaleString();
+                return Math.round(Number(val)).toLocaleString();
+              }}
+            />
+            <Tooltip
+              formatter={(val) => {
+                if (metric === 'gm_pct') return (Number(val) * 100).toFixed(1) + '%';
+                if (metric === 'revenue' || metric === 'gm_dollar')
+                  return '$' + Math.round(Number(val)).toLocaleString();
+                return Math.round(Number(val)).toLocaleString();
+              }}
+              labelFormatter={(d) => d}
+            />
+            <Line
+              type="monotone"
+              dataKey={metric}
+              stroke={
+                metric === 'revenue'
+                  ? '#0077b6'
+                  : metric === 'gm_dollar'
+                  ? '#52b788'
+                  : metric === 'gm_pct'
+                  ? '#ffb703'
+                  : '#fb8500'
+              }
+              strokeWidth={2}
+              dot={{
+                // show subtle dots only on anomaly dates (for clarity, always show for all metrics)
+                r: 0,
+              }}
+              activeDot={(props: any) =>
+                anomalyDateSet.has(props.payload.date) ? (
+                  <circle cx={props.cx} cy={props.cy} r={6} fill="#e63946" stroke="#e63946" />
+                ) : (
+                  <circle cx={props.cx} cy={props.cy} r={4} />
+                )
+              }
+            />
+          </LineChart>
+        </ResponsiveContainer>
+        <div className="text-sm text-muted mt-1">
+          * {metric === 'revenue'
+            ? 'Revenue'
+            : metric === 'gm_dollar'
+            ? 'Gross Margin $'
+            : metric === 'gm_pct'
+            ? 'Gross Margin %'
+            : 'Units'}{' '}
+          over time
+          {selectedStore && ` · Store ${selectedStore}`}
+          {selectedCategory && ` · Category ${selectedCategory}`}
+          {selectedSku && ` · SKU ${selectedSku}`}
+        </div>
+      </div>
+
+      {/* Top Categories (Pie + Table) and Top SKUs */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card p-4">
+          <div className="h2 mb-2">Top Categories</div>
+
+          {/* Pie */}
+          {categories.length > 0 && (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={categories.map((c) => ({ name: c.category, value: c.rev }))}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  labelLine={false}
+                  label={({ percent }) => `${Math.round(percent * 100)}%`}
+                >
+                  {categories.map((_, i) => (
+                    <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(val) => '$' + Math.round(Number(val)).toLocaleString()}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* Table */}
+          <div className="overflow-x-auto mt-3">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th className="p-2">Category</th>
+                  <th className="p-2">Revenue</th>
+                  <th className="p-2">GM$</th>
+                  <th className="p-2">GM%</th>
+                  <th className="p-2">Units</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((c) => (
+                  <tr
+                    key={c.category}
+                    className="border-t hover:bg-gray-50 cursor-pointer"
+                    onClick={() =>
+                      setSelectedCategory((prev) =>
+                        prev === c.category ? '' : c.category
+                      )
+                    }
+                  >
+                    <td className="p-2">{c.category}</td>
+                    <td className="p-2">${Math.round(c.rev).toLocaleString()}</td>
+                    <td className="p-2">${Math.round(c.gm).toLocaleString()}</td>
+                    <td className="p-2">{(c.gm_pct * 100).toFixed(1)}%</td>
+                    <td className="p-2">{Math.round(c.units).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {selectedCategory && (
+            <div className="text-sm mt-2">
+              <button
+                onClick={() => setSelectedCategory('')}
+                className="link"
+              >
+                ← Clear category
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="card p-4">
+          <div className="h2 mb-2">Top SKUs</div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th className="p-2">SKU</th>
+                  <th className="p-2">Revenue</th>
+                  <th className="p-2">GM$</th>
+                  <th className="p-2">GM%</th>
+                  <th className="p-2">Units</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topSkus.map((item) => (
+                  <tr
+                    key={item.sku}
+                    className="border-t hover:bg-gray-50 cursor-pointer"
+                    onClick={() =>
+                      setSelectedSku((prev) => (prev === item.sku ? '' : item.sku))
+                    }
+                  >
+                    <td className="p-2">{item.sku}</td>
+                    <td className="p-2">
+                      ${Math.round(item.revenue).toLocaleString()}
+                    </td>
+                    <td className="p-2">
+                      ${Math.round(item.gm_dollar).toLocaleString()}
+                    </td>
+                    <td className="p-2">{(item.gm_pct * 100).toFixed(1)}%</td>
+                    <td className="p-2">{Math.round(item.units).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {selectedSku && (
+            <div className="text-sm mt-2">
+              <button onClick={() => setSelectedSku('')} className="link">
+                ← Clear SKU
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Margin Waterfall + Anomalies */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card p-4">
+          <div className="h2 mb-3">Margin Waterfall</div>
+          {marginSteps.length === 0 ? (
+            <p className="text-sm text-muted">No data</p>
+          ) : (
+            <ul className="space-y-2">
+              {marginSteps.map((step) => (
+                <li key={step.name} className="flex justify-between">
+                  <span>{step.name}</span>
+                  <span>
+                    {step.value >= 0 ? '$' : '-$'}
+                    {Math.abs(step.value).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="card p-4">
+          <div className="h2 mb-3">Anomalies</div>
+          {anomalies.length === 0 ? (
+            <p className="text-sm text-muted">No anomalies detected in the selected period.</p>
+          ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left">
-                    <th className="p-2">SKU</th>
+                    <th className="p-2">Date</th>
+                    <th className="p-2">Category/SKU</th>
                     <th className="p-2">Revenue</th>
-                    <th className="p-2">GM$</th>
-                    <th className="p-2">GM%</th>
-                    <th className="p-2">Units</th>
+                    <th className="p-2">Δ vs avg</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topSkus.map((item) => (
+                  {anomalies.map((a, idx) => (
                     <tr
-                      key={item.sku}
+                      key={idx}
                       className="border-t hover:bg-gray-50 cursor-pointer"
-                      onClick={() =>
-                        setSelectedSku((prev) => (prev === item.sku ? '' : item.sku))
-                      }
+                      onClick={() => handleAnomalyClick(a)}
                     >
-                      <td className="p-2">{item.sku}</td>
+                      <td className="p-2">{a.date}</td>
+                      <td className="p-2">{a.category}</td>
                       <td className="p-2">
-                        ${Math.round(item.revenue).toLocaleString()}
+                        ${Math.round(a.revenue).toLocaleString()}
                       </td>
-                      <td className="p-2">
-                        ${Math.round(item.gm_dollar).toLocaleString()}
-                      </td>
-                      <td className="p-2">{(item.gm_pct * 100).toFixed(1)}%</td>
-                      <td className="p-2">{Math.round(item.units).toLocaleString()}</td>
+                      <td className="p-2">{a.delta_pct.toFixed(1)}%</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {selectedSku && (
-              <div className="text-sm mt-2">
-                <button onClick={() => setSelectedSku('')} className="link">
-                  ← Clear SKU
-                </button>
-              </div>
-            )}
-          </div>
+          )}
         </div>
-
-        {/* Margin Waterfall + Anomalies */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="card p-4">
-            <div className="h2 mb-3">Margin Waterfall</div>
-            {marginSteps.length === 0 ? (
-              <p className="text-sm text-muted">No data</p>
-            ) : (
-              <ul className="space-y-2">
-                {marginSteps.map((step) => (
-                  <li key={step.name} className="flex justify-between">
-                    <span>{step.name}</span>
-                    <span>
-                      {step.value >= 0 ? '$' : '-$'}
-                      {Math.abs(step.value).toLocaleString()}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="card p-4">
-            <div className="h2 mb-3">Anomalies</div>
-            {anomalies.length === 0 ? (
-              <p className="text-sm text-muted">No anomalies detected in the selected period.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left">
-                      <th className="p-2">Date</th>
-                      <th className="p-2">Category/SKU</th>
-                      <th className="p-2">Revenue</th>
-                      <th className="p-2">Δ vs avg</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {anomalies.map((a, idx) => (
-                      <tr
-                        key={idx}
-                        className="border-t hover:bg-gray-50 cursor-pointer"
-                        onClick={() => handleAnomalyClick(a)}
-                      >
-                        <td className="p-2">{a.date}</td>
-                        <td className="p-2">{a.category}</td>
-                        <td className="p-2">
-                          ${Math.round(a.revenue).toLocaleString()}
-                        </td>
-                        <td className="p-2">{a.delta_pct.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+      </div>
 
       {/* AI explanation sidebar */}
       {explainerOpen && (
@@ -748,27 +743,31 @@ export default function DashboardPage() {
           <div className="mb-2 flex items-center justify-between">
             <div className="text-lg font-semibold">Anomaly Details</div>
             <button className="text-xl" onClick={() => setExplainerOpen(false)}>
-              ✖
+              ✕
             </button>
           </div>
-          {currentAnomaly && (
-            <div className="mb-3 text-sm text-gray-700">
-              <div>
-                <strong>Date:</strong> {currentAnomaly.date}
-              </div>
-              <div>
-                <strong>Category/SKU:</strong> {currentAnomaly.category}
-              </div>
-              <div>
-                <strong>Revenue:</strong> $
-                {Math.round(currentAnomaly.revenue).toLocaleString()}
-              </div>
-              <div>
-                <strong>Δ vs avg:</strong> {currentAnomaly.delta_pct.toFixed(1)}%
-              </div>
+          <div className="mb-3 text-sm text-gray-700">
+            <div>
+              <strong>Date:</strong> {currentAnomaly?.date}
             </div>
-          )}
-          {!explanation ? <p>Analyzing anomaly…</p> : <p className="whitespace-pre-wrap">{explanation}</p>}
+            <div>
+              <strong>Category/SKU:</strong> {currentAnomaly?.category}
+            </div>
+            <div>
+              <strong>Revenue:</strong> $
+              {Math.round(currentAnomaly?.revenue ?? 0).toLocaleString()}
+            </div>
+            <div>
+              <strong>Δ vs avg:</strong> {currentAnomaly?.delta_pct.toFixed(1)}%
+            </div>
+          </div>
+          <div>
+            {explanation ? (
+              <p className="text-sm whitespace-pre-wrap">{explanation}</p>
+            ) : (
+              <p>Analyzing anomaly…</p>
+            )}
+          </div>
         </div>
       )}
     </main>
