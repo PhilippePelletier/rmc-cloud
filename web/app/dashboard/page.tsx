@@ -422,8 +422,7 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-      </div>
-
+      
       {/* Error */}
       {err && <div className="card text-red-600 p-3">{err}</div>}
 
@@ -771,6 +770,7 @@ export default function DashboardPage() {
               <p>Analyzing anomaly…</p>
             )}
           </div>
+        </div>
       )}
     </main>
   );
