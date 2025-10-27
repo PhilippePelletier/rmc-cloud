@@ -34,8 +34,19 @@ export default function Dashboard() {
   const [selectedStore, setSelectedStore] = useState<string>('');            // store filter (empty = all)
   const [selectedCategory, setSelectedCategory] = useState<string>('');      // NEW: category filter (empty = all)
   const [selectedSku, setSelectedSku] = useState<string>('');                // SKU filter (empty = all)
-  const [storeFilter, setStoreFilter] = useState<string>('');                // NEW: search term for store filter
+  const [storeFilter, setStoreFilter] = useState<string>('');                // NEW: search term for store filter 
 
+  const [showCustom, setShowCustom] = useState(false);       // whether the custom date picker is visible
+  const [customFrom, setCustomFrom] = useState('');          // custom range start date (YYYY-MM-DD)
+  const [customTo, setCustomTo] = useState('');              // custom range end date (YYYY-MM-DD)
+
+  const [metric, setMetric] = useState<'revenue' | 'gm_dollar' | 'gm_pct' | 'units'>('revenue');
+
+  const [explainerOpen, setExplainerOpen] = useState(false); // whether the AI explanation sidebar is open
+  const [currentAnomaly, setCurrentAnomaly] = useState<Anomaly | null>(null);
+  const [explanation, setExplanation] = useState('');        // text of the AI explanation
+
+  
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [cats, setCats] = useState<Cat[]>([]);
   const [marginSteps, setMarginSteps] = useState<Array<{ name: string; value: number }>>([]);
@@ -57,6 +68,21 @@ export default function Dashboard() {
       }
     })();
   }, []);
+
+  const [skuList, setSkuList] = useState<string[]>([]); 
+  useEffect(() => {
+  (async () => {
+    try {
+      const res = await fetch('/api/skus')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to load SKUs')
+      setSkuList(data.skus || [])
+    } catch (e: any) {
+      console.error('Error loading SKU list:', e.message)
+    }
+  })()
+}, [])
+
 
   // NEW: Fetch list of categories for dropdown:
   const [categoryList, setCategoryList] = useState<string[]>([]);
@@ -91,9 +117,17 @@ export default function Dashboard() {
 
   // Fetch all dashboard data whenever filters or range change
   useEffect(() => {
-    (async () => {
-      try {
-        const { from, to } = getDateRange();
+    // Determine the date range to query
+    let from: string | undefined, to: string | undefined
+    if (range === 'custom') {
+      from = customFrom
+      to = customTo
+    } else {
+      ({ from, to } = getDateRange(range))  // assume getDateRange(range) returns {from, to} for presets
+    }
+    if (!from || !to) {
+      return  // if custom range not fully specified, do not fetch yet
+    }
         // Build query string with from/to and any filters
         const params = new URLSearchParams();
         params.append('from', from);
