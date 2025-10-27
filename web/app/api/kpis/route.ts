@@ -125,7 +125,12 @@ export async function GET(req: NextRequest) {
     // Prepare trend series for revenue over time
     const trend = rows.map(r => ({
       date: r.date,
-      revenue: Number(r.net_sales ?? 0)
+      revenue: Number(r.net_sales ?? 0),
+      gm_dollar: Number(r.gm_dollar ?? 0),
+      gm_pct: Number(r.net_sales ?? 0) 
+        ? Number(r.gm_dollar ?? 0) / Number(r.net_sales ?? 0) 
+        : 0,
+      units: Number(r.units ?? 0)
     }));
 
     return NextResponse.json({
