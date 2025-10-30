@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
   const [metric, setMetric] = useState<'revenue' | 'gm_dollar' | 'gm_pct' | 'units'>('revenue');
 
-  // Unified filter search query
+  // Unified search query
   const [unifiedQuery, setUnifiedQuery] = useState('');
 
   // ---- Data state ----
@@ -170,7 +170,6 @@ export default function DashboardPage() {
         setSkuList((data.skus ?? []).map((x: any) => String(x)));
       } catch (e: any) {
         console.error('SKUs load error:', e.message);
-        // fallback: we’ll still allow clicking top SKUs; search will have fewer items
       }
     })();
   }, []);
@@ -308,62 +307,65 @@ export default function DashboardPage() {
       {/* Centered Dashboard title */}
       <h1 className="text-3xl font-bold text-center mb-6">Dashboard</h1>
 
-     <div className="flex flex-col md:flex-row gap-4 mb-4">
-        {/* Filters: Store, Category, SKU */}
-        <div className="card p-4 flex-1">
-          <label className="label block mb-1">Filters</label>
-          <div className="space-y-4">
-            <div>
-              <label className="label">
-                <span className="label-text">Store</span>
-              </label>
-              <select
-                value={selectedStore}
-                onChange={(e) => setSelectedStore(e.target.value)}
-                className="select w-full"
-              >
-                <option value="">All Stores</option>
-                {storeList.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">
-                <span className="label-text">Category</span>
-              </label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="select w-full"
-              >
-                <option value="">All Categories</option>
-                {categoryList.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">
-                <span className="label-text">SKU</span>
-              </label>
-              <select
-                value={selectedSku}
-                onChange={(e) => setSelectedSku(e.target.value)}
-                className="select w-full"
-              >
-                <option value="">All SKUs</option>
-                {skuList.map((sku) => (
-                  <option key={sku} value={sku}>{sku}</option>
-                ))}
-              </select>
-            </div>
+      {/* Responsive 3‑column grid for Filters, Timeframe, Settings */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-start">
+        {/* Filters card */}
+        <div className="card flex-1 min-h-[150px] flex flex-col">
+          <label className="label block mb-1">
+            <span className="mr-2">🔍</span>Filters
+          </label>
+          {/* Store */}
+          <div className="mb-2">
+            <select
+              value={selectedStore}
+              onChange={(e) => setSelectedStore(e.target.value)}
+              className="select w-full"
+            >
+              <option value="">All Stores</option>
+              {storeList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Category */}
+          <div className="mb-2">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="select w-full"
+            >
+              <option value="">All Categories</option>
+              {categoryList.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* SKU */}
+          <div>
+            <select
+              value={selectedSku}
+              onChange={(e) => setSelectedSku(e.target.value)}
+              className="select w-full"
+            >
+              <option value="">All SKUs</option>
+              {skuList.map((sku) => (
+                <option key={sku} value={sku}>
+                  {sku}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Timeframe */}
-        <div className="card p-4 flex-1">
-          <label className="label block mb-1">Timeframe</label>
+        {/* Timeframe card */}
+        <div className="card flex-1 min-h-[150px] flex flex-col">
+          <label className="label block mb-1">
+            <span className="mr-2">🗓</span>Timeframe
+          </label>
           <select
             value={range}
             onChange={(e) => setRange(e.target.value as any)}
@@ -397,7 +399,7 @@ export default function DashboardPage() {
                   type="button"
                   className="btn flex-1"
                   onClick={() => {
-                    /* Apply already triggers effect */
+                    /* custom range applies automatically */
                   }}
                 >
                   Apply
@@ -418,19 +420,31 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Settings */}
-        <div className="card p-4 flex-1">
-          <label className="label block mb-1">Settings</label>
-          <details className="dropdown">
-            <summary className="btn w-full">☰ Menu</summary>
+        {/* Settings card */}
+        <div className="card flex-1 min-h-[150px] flex flex-col">
+          <label className="label block mb-1">
+            <span className="mr-2">⚙️</span>Settings
+          </label>
+          <details className="dropdown mt-auto">
+            <summary className="btn w-full">
+              <span className="mr-2">⚙️</span>Settings Menu
+            </summary>
             <ul className="dropdown-content menu p-2 shadow bg-white rounded-box w-52">
               <li>
-                <button type="button" onClick={handleReset} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="flex items-center gap-2"
+                >
                   🔄 Reset Filters
                 </button>
               </li>
               <li>
-                <button type="button" onClick={handleResetData} className="flex items-center gap-2 text-red-600">
+                <button
+                  type="button"
+                  onClick={handleResetData}
+                  className="flex items-center gap-2 text-red-600"
+                >
                   🗑️ Reset Data
                 </button>
               </li>
@@ -439,18 +453,33 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Unified search bar (separate from filters) */}
+      {/* Unified search bar */}
       <div className="mb-6">
-          <input
-            type="text"
-            list="unified-suggestions"
-            value={unifiedQuery}
-            onChange={(e) => setUnifiedQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleUnifiedSelect(); }}
-            onBlur={handleUnifiedSelect}
-            placeholder="Store, SKU, or Category"
-            className="input w-full"
-          />
+        <input
+          type="text"
+          list="unified-suggestions"
+          value={unifiedQuery}
+          onChange={(e) => setUnifiedQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleUnifiedSelect();
+            }
+          }}
+          onBlur={handleUnifiedSelect}
+          placeholder="Store, SKU, or Category"
+          className="input w-full"
+        />
+        <datalist id="unified-suggestions">
+          {storeList.map((s) => (
+            <option key={`store-${s.id}`} value={`Store: ${s.name}`} />
+          ))}
+          {categoryList.map((c) => (
+            <option key={`cat-${c}`} value={`Category: ${c}`} />
+          ))}
+          {skuList.slice(0, 100).map((sku) => (
+            <option key={`sku-${sku}`} value={`SKU: ${sku}`} />
+          ))}
+        </datalist>
       </div>
 
       {/* Error */}
@@ -562,7 +591,6 @@ export default function DashboardPage() {
               }
               strokeWidth={2}
               dot={{
-                // subtle dot styling
                 r: 0,
               }}
               activeDot={(props: any) =>
