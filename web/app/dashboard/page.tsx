@@ -308,31 +308,57 @@ export default function DashboardPage() {
       {/* Centered Dashboard title */}
       <h1 className="text-3xl font-bold text-center mb-6">Dashboard</h1>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        {/* Unified Filters */}
+     <div className="flex flex-col md:flex-row gap-4 mb-4">
+        {/* Filters: Store, Category, SKU */}
         <div className="card p-4 flex-1">
           <label className="label block mb-1">Filters</label>
-          <input
-            type="text"
-            list="unified-suggestions"
-            value={unifiedQuery}
-            onChange={(e) => setUnifiedQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleUnifiedSelect(); }}
-            onBlur={handleUnifiedSelect}
-            placeholder="Store, SKU, or Category"
-            className="input w-full"
-          />
-          <datalist id="unified-suggestions">
-            {storeList.map((s) => (
-              <option key={`store-${s.id}`} value={`Store: ${s.name}`} />
-            ))}
-            {categoryList.map((c) => (
-              <option key={`cat-${c}`} value={`Category: ${c}`} />
-            ))}
-            {skuList.slice(0, 100).map((sku) => (
-              <option key={`sku-${sku}`} value={`SKU: ${sku}`} />
-            ))}
-          </datalist>
+          <div className="space-y-4">
+            <div>
+              <label className="label">
+                <span className="label-text">Store</span>
+              </label>
+              <select
+                value={selectedStore}
+                onChange={(e) => setSelectedStore(e.target.value)}
+                className="select w-full"
+              >
+                <option value="">All Stores</option>
+                {storeList.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">
+                <span className="label-text">Category</span>
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="select w-full"
+              >
+                <option value="">All Categories</option>
+                {categoryList.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">
+                <span className="label-text">SKU</span>
+              </label>
+              <select
+                value={selectedSku}
+                onChange={(e) => setSelectedSku(e.target.value)}
+                className="select w-full"
+              >
+                <option value="">All SKUs</option>
+                {skuList.map((sku) => (
+                  <option key={sku} value={sku}>{sku}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Timeframe */}
@@ -411,6 +437,20 @@ export default function DashboardPage() {
             </ul>
           </details>
         </div>
+      </div>
+
+      {/* Unified search bar (separate from filters) */}
+      <div className="mb-6">
+          <input
+            type="text"
+            list="unified-suggestions"
+            value={unifiedQuery}
+            onChange={(e) => setUnifiedQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleUnifiedSelect(); }}
+            onBlur={handleUnifiedSelect}
+            placeholder="Store, SKU, or Category"
+            className="input w-full"
+          />
       </div>
 
       {/* Error */}
