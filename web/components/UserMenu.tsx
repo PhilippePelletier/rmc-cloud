@@ -1,3 +1,4 @@
+// web/components/UserMenu.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -30,7 +31,7 @@ export default function UserMenu({ user }: Props) {
   const avatar =
     user?.user_metadata?.avatar_url ||
     `https://api.dicebear.com/8.x/identicon/svg?seed=${encodeURIComponent(
-      user?.email || 'user'
+      user?.email || 'user',
     )}`;
 
   async function signOut() {
@@ -42,7 +43,7 @@ export default function UserMenu({ user }: Props) {
     return (
       <Link
         href="/signin"
-        className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
+        className="rounded-md bg-blue-800 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
       >
         Sign in
       </Link>
@@ -54,37 +55,44 @@ export default function UserMenu({ user }: Props) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full border px-2 py-1 hover:bg-gray-50"
+        className="flex items-center rounded-full p-1 hover:bg-blue-900 focus:outline-none"
       >
-        <span className="relative block h-6 w-6 overflow-hidden rounded-full">
+        <span className="relative block h-8 w-8 overflow-hidden rounded-full">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={avatar} alt="avatar" className="h-full w-full object-cover" />
-        </span>
-        <span className="hidden text-sm text-gray-700 sm:block">
-          {user?.user_metadata?.name || user?.email}
+          <img
+            src={avatar}
+            alt="avatar"
+            className="h-full w-full object-cover"
+          />
         </span>
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border bg-white shadow-lg">
-          <div className="px-3 py-2 text-xs text-gray-500">
+        <div className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-lg border border-blue-800 bg-blue-950 text-gray-200 shadow-xl">
+          <div className="px-3 py-2 text-xs text-gray-400">
             Signed in as
-            <div className="truncate font-medium text-gray-800">
+            <div className="truncate font-medium text-gray-100">
               {user?.user_metadata?.name || user?.email}
             </div>
           </div>
-          <div className="my-1 h-px bg-gray-100" />
-          <a href="/uploads" className="block px-3 py-2 text-sm hover:bg-gray-50">
+          <div className="my-1 h-px bg-blue-800" />
+          <a
+            href="/uploads"
+            className="block px-3 py-2 text-sm hover:bg-blue-900 hover:text-white"
+          >
             Uploads
           </a>
-          <a href="/jobs" className="block px-3 py-2 text-sm hover:bg-gray-50">
+          <a
+            href="/jobs"
+            className="block px-3 py-2 text-sm hover:bg-blue-900 hover:text-white"
+          >
             Jobs
           </a>
-          <div className="my-1 h-px bg-gray-100" />
+          <div className="my-1 h-px bg-blue-800" />
           <button
             type="button"
             onClick={signOut}
-            className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
+            className="block w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-blue-900 hover:text-red-300"
           >
             Sign out
           </button>
