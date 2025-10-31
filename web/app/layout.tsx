@@ -14,7 +14,7 @@ export const metadata = {
   description: 'MarginHQ — Finance-grade retail analytics',
 };
 
-export default async function RootLayout({ children }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { user } = await getServerSession();
   return (
     <html lang="en">
