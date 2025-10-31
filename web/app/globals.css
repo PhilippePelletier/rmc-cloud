@@ -5,6 +5,13 @@
 /* Import fonts: Inter for body, Playfair Display for headings */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
+:root {
+  --accent: #2563eb;       /* default blue */
+  --accent-hover: #1e40af;
+}
+[data-theme='violet'] { --accent:#7e22ce; --accent-hover:#5b21b6; }
+[data-theme='green']  { --accent:#22c55e; --accent-hover:#15803d; }
+
 /* Base typography */
 html, body {
   font-family: 'Inter', sans-serif;
