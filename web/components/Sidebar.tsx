@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const APP_NAME = 'MarginHQ';
+
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/uploads', label: 'Uploads' },
@@ -15,26 +16,33 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="hidden w-52 shrink-0 border-r bg-background px-4 py-6 md:block">
-      <Link href="/" className="mb-6 block text-lg font-semibold">
-        {APP_NAME}
-      </Link>
-      <nav className="flex flex-col gap-2">
-        {NAV_ITEMS.map(({ href, label }) => {
-          const isActive = pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`rounded-md px-3 py-2 text-sm font-medium hover:bg-muted ${
-                isActive ? 'bg-muted text-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+    <aside className="hidden md:block w-56 shrink-0 bg-blue-950 text-gray-200">
+      <div className="px-4 py-6">
+        <Link
+          href="/"
+          className="mb-8 block text-xl font-bold tracking-wide text-gray-100 hover:text-white"
+        >
+          {APP_NAME}
+        </Link>
+        <nav className="flex flex-col divide-y divide-blue-800">
+          {NAV_ITEMS.map(({ href, label }) => {
+            const isActive = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`py-3 px-3 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-900 text-white'
+                    : 'text-gray-400 hover:bg-blue-900 hover:text-white'
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
     </aside>
   );
 }
