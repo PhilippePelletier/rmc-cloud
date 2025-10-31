@@ -83,6 +83,12 @@ export default function UserMenu({ user }: Props) {
           >
             Jobs
           </a>
+          <a
+            href="/profile"
+            className="block px-3 py-2 text-sm hover:bg-gray-800 hover:text-white"
+          >
+            Profile Settings
+          </a>
           <div className="my-1 h-px bg-gray-800" />
           <button
             type="button"
