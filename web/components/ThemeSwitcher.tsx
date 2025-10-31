@@ -1,13 +1,15 @@
 "use client";
 
 import { useTheme } from "@/components/ThemeProvider";
-import { cn } from "@/lib/utils";
 
 /**
- * ThemeSwitcher renders a list of colour options the user can click to
- * switch the accent palette.  The selected theme is highlighted with a
- * ring.  Themes correspond to CSS variables defined in globals.css.
+ * Fall-back classnames helper. Joins truthy strings with spaces.
  */
+function cn(...classes: (string | undefined | null | false)[]) {
+  return classes.filter(Boolean).join(" ");
+}
+
+/** Theme definitions; expand if you add more palettes. */
 const themes = [
   { id: "default", color: "bg-blue-600" },
   { id: "violet", color: "bg-violet-600" },
@@ -25,7 +27,7 @@ export default function ThemeSwitcher() {
           className={cn(
             "h-5 w-5 rounded-full border-2 transition-all",
             color,
-            theme === id ? "ring-2 ring-offset-2 ring-offset-gray-900" : "border-gray-500"
+            theme === id && "ring-2 ring-offset-2 ring-offset-gray-900"
           )}
         />
       ))}
