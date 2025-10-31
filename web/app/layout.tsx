@@ -1,4 +1,4 @@
-// app/layout.tsx (modified)
+// app/layout.tsx
 import './globals.css';
 import ToasterClient from '@/components/ToasterClient';
 import SupabaseProvider from '@/components/SupabaseProvider';
@@ -8,13 +8,16 @@ import UserMenu from '@/components/UserMenu';
 import HeaderShell from '@/components/HeaderShell';
 import Sidebar from '@/components/Sidebar';
 
-// Updated metadata for new brand
 export const metadata = {
   title: 'MarginHQ',
   description: 'MarginHQ — Finance-grade retail analytics',
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user } = await getServerSession();
   return (
     <html lang="en">
@@ -24,23 +27,30 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {/* Persistent side navigation */}
             <Sidebar />
             <div className="flex flex-1 flex-col">
-              {/* Sticky top bar for user actions */}
+              {/* Sticky top bar – now slightly taller and dark blue */}
               <HeaderShell>
-                <header className="sticky top-0 z-50 flex items-center justify-end gap-3 border-b bg-background/80 backdrop-blur px-4 py-2">
+                <header className="sticky top-0 z-50 flex items-center justify-end gap-4 border-b border-blue-800 bg-blue-950 px-5 py-3 text-white">
                   {user ? (
                     <UserMenu user={user} />
                   ) : (
-                    <>
-                      <Link className="btn" href="/sign-in">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        className="rounded-md bg-blue-800 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
+                        href="/sign-in"
+                      >
                         Sign In
                       </Link>
-                      <Link className="btn" href="/sign-up">
+                      <Link
+                        className="rounded-md bg-blue-800 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
+                        href="/sign-up"
+                      >
                         Sign Up
                       </Link>
-                    </>
+                    </div>
                   )}
                 </header>
               </HeaderShell>
+
               <main className="flex-1 container mx-auto px-4 py-6">
                 <ToasterClient />
                 {children}
