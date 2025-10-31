@@ -28,19 +28,23 @@ export default function Sidebar() {
     <aside
       className={`hidden md:flex flex-col ${
         collapsed ? 'w-16' : 'w-56'
-      } shrink-0 border-r border-gray-800 bg-gray-900 text-gray-300 transition-all duration-200`}
+      } shrink-0 border-r border-gray-800 bg-gray-950 text-gray-300 transition-all duration-200`}
     >
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
-        <span
-          className={`app-title inline-flex items-center justify-center rounded-md border border-gray-700 px-2 py-1 ${
-            collapsed ? 'text-sm tracking-wide' : 'text-lg font-bold tracking-wider'
-          }`}
-        >
-          {collapsed ? 'MHQ' : APP_NAME}
-        </span>
+      <div className="px-4 py-4 border-b border-gray-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span
+            className={`app-title text-lg font-bold ${
+              collapsed ? 'text-sm font-bold' : ''
+            }`}
+          >
+            {collapsed ? 'MHQ' : APP_NAME}
+          </span>
+          {/* vertical delimiter to the right of the title when expanded */}
+          {!collapsed && <div className="h-5 w-px bg-gray-700 ml-2"></div>}
+        </div>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="rounded p-1 hover:bg-gray-800"
+          className="rounded p-1 hover:bg-gray-900"
         >
           {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
@@ -54,8 +58,8 @@ export default function Sidebar() {
               href={href}
               className={`group flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-gray-800 text-white'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-400 hover:bg-gray-900 hover:text-white'
               }`}
             >
               <Icon size={20} className="shrink-0" />
