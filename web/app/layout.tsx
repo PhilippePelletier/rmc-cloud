@@ -1,5 +1,5 @@
-// app/layout.tsx
 import './globals.css';
+import type { ReactNode } from 'react';
 import ToasterClient from '@/components/ToasterClient';
 import SupabaseProvider from '@/components/SupabaseProvider';
 import Link from 'next/link';
@@ -13,36 +13,34 @@ export const metadata = {
   description: 'MarginHQ — Finance-grade retail analytics',
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Fetch the current user from Supabase; used to determine menu state
   const { user } = await getServerSession();
   return (
     <html lang="en">
-      <body className="min-h-screen bg-background text-foreground">
+      {/* Apply a dark background and light text globally */}
+      <body className="min-h-screen bg-black text-gray-100">
         <SupabaseProvider>
           <div className="flex min-h-screen">
             {/* Persistent side navigation */}
             <Sidebar />
             <div className="flex flex-1 flex-col">
-              {/* Sticky top bar – now slightly taller and dark blue */}
+              {/* Sticky top bar – dark with thin separator */}
               <HeaderShell>
-                <header className="sticky top-0 z-50 flex items-center justify-end gap-4 border-b border-blue-800 bg-blue-950 px-5 py-3 text-white">
+                <header className="sticky top-0 z-50 flex items-center justify-end gap-4 border-b border-gray-800 bg-black px-5 py-4">
                   {user ? (
                     <UserMenu user={user} />
                   ) : (
                     <div className="flex items-center gap-2">
                       <Link
-                        className="rounded-md bg-blue-800 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
                         href="/sign-in"
+                        className="rounded-md bg-gray-800 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-700"
                       >
                         Sign In
                       </Link>
                       <Link
-                        className="rounded-md bg-blue-800 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
                         href="/sign-up"
+                        className="rounded-md bg-gray-800 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-700"
                       >
                         Sign Up
                       </Link>
@@ -50,7 +48,7 @@ export default async function RootLayout({
                   )}
                 </header>
               </HeaderShell>
-
+              {/* Main content area */}
               <main className="flex-1 container mx-auto px-4 py-6">
                 <ToasterClient />
                 {children}
